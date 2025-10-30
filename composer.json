@@ -1,6 +1,6 @@
 {
   "name": "200MPH/myxa-Framework",
-  "description": "Myxa is a tiny, flexible, powerful, and quietly smart PHP Framework.",
+  "description": "Myxa core framework package",
   "type": "library",
   "license": "MIT",
   "authors": [
@@ -11,8 +11,8 @@
   ],
   "autoload": {
     "psr-4": {
-      "App\\": "app/",
-      "Test\\": "test/"
+      "Myxa\\": "src/",
+      "Test\\": "tests/"
     }
   },
   "require": {
