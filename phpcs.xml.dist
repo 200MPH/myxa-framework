@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<ruleset name="Myxa PSR-12">
+  <description>PSR-12 validation for the Myxa framework.</description>
+
+  <arg name="colors"/>
+  <arg value="sp"/>
+
+  <file>src</file>
+  <file>tests</file>
+
+  <exclude-pattern>vendor/*</exclude-pattern>
+
+  <rule ref="PSR12"/>
+</ruleset>
