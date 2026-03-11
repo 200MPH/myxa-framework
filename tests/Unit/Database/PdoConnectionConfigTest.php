@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use InvalidArgumentException;
-use Myxa\Database\ConnectionConfig;
+use Myxa\Database\PdoConnectionConfig;
 use PHPUnit\Framework\TestCase;
 
-final class ConnectionConfigTest extends TestCase
+final class PdoConnectionConfigTest extends TestCase
 {
     public function testBuildsDsnFromConstructorParts(): void
     {
-        $config = new ConnectionConfig(
+        $config = new PdoConnectionConfig(
             engine: 'mysql',
             database: 'app_db',
             host: '127.0.0.1',
@@ -37,7 +37,7 @@ final class ConnectionConfigTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        new ConnectionConfig(
+        new PdoConnectionConfig(
             engine: '',
             database: 'app_db',
             host: '127.0.0.1',
@@ -46,7 +46,7 @@ final class ConnectionConfigTest extends TestCase
 
     public function testFromDsnParsesKnownAndExtraSegments(): void
     {
-        $config = ConnectionConfig::fromDsn(
+        $config = PdoConnectionConfig::fromDsn(
             dsn: 'mysql:dbname=app_db;host=127.0.0.1;port=3306;charset=utf8mb4;unix_socket=/tmp/mysql.sock',
             username: 'app_user',
             password: 'secret',
@@ -66,6 +66,6 @@ final class ConnectionConfigTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        ConnectionConfig::fromDsn('not-a-valid-dsn');
+        PdoConnectionConfig::fromDsn('not-a-valid-dsn');
     }
 }

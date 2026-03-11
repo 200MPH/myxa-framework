@@ -8,9 +8,9 @@ use InvalidArgumentException;
 use SensitiveParameter;
 
 /**
- * Immutable database connection configuration.
+ * Immutable PDO connection configuration.
  */
-final readonly class ConnectionConfig
+final readonly class PdoConnectionConfig
 {
     /**
      * @param array<int, mixed> $options PDO options.

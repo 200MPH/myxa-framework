@@ -12,7 +12,7 @@ use SensitiveParameter;
 /**
  * PDO connection wrapper with alias-based registry support.
  */
-final class Connection
+final class PdoConnection implements TransactionalConnectionInterface
 {
     /** @var array<string, self> */
     private static array $registry = [];
@@ -20,9 +20,9 @@ final class Connection
     private ?PDO $pdo = null;
 
     /**
-     * @param ConnectionConfig $config Immutable DB configuration.
+     * @param PdoConnectionConfig $config Immutable DB configuration.
      */
-    public function __construct(private readonly ConnectionConfig $config)
+    public function __construct(private readonly PdoConnectionConfig $config)
     {
     }
 
@@ -47,12 +47,31 @@ final class Connection
      */
     public static function registerNew(
         string $alias,
-        ConnectionConfig $config,
+        PdoConnectionConfig $config,
         bool $replace = false,
     ): self {
         $connection = new self($config);
 
         return self::register($alias, $connection, $replace);
+    }
+
+    /**
+     * Create and register a connection directly from DSN values.
+     *
+     * @param array<int, mixed> $options PDO options.
+     */
+    public static function registerFromDsn(
+        string $alias,
+        string $dsn,
+        ?string $username = null,
+        #[SensitiveParameter]
+        ?string $password = null,
+        array $options = [],
+        bool $replace = false,
+    ): self {
+        $config = PdoConnectionConfig::fromDsn($dsn, $username, $password, $options);
+
+        return self::registerNew($alias, $config, $replace);
     }
 
     /**
@@ -177,8 +196,16 @@ final class Connection
     /**
      * Return immutable connection config.
      */
-    public function getConfig(): ConnectionConfig
+    public function getPdoConnectionConfig(): PdoConnectionConfig
     {
         return $this->config;
+    }
+
+    /**
+     * Backward-compatible alias for getPdoConnectionConfig().
+     */
+    public function getConfig(): PdoConnectionConfig
+    {
+        return $this->getPdoConnectionConfig();
     }
 }
