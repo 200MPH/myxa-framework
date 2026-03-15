@@ -1,0 +1,40 @@
+name: myxa-framework
+services:
+  php:
+    container_name: myxa-php-cli
+    build:
+      context: .
+      dockerfile: docker/php8.4-cli/Dockerfile
+      args:
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    working_dir: /app
+    user: app
+    environment:
+      COMPOSER_HOME: /tmp/composer-cache
+    volumes:
+      - ./:/app
+      - composer-cache:/tmp/composer-cache
+    tty: true
+    stdin_open: true
+    command: ["sleep", "infinity"]
+
+  mysql:
+    container_name: myxa-mysql
+    image: mysql:8.4
+    env_file:
+      - ./docker/mysql/.env
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  composer-cache:
+  mysql-data:
