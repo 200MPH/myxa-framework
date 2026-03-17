@@ -32,6 +32,12 @@ final class QueryBuilderTest extends TestCase
             $builder->toSql(),
         );
         self::assertSame(
+            'SELECT `id`, `users`.`email`, `users`.* FROM `app_db`.`users`'
+            . " WHERE `status` = 'active' AND `created_at` BETWEEN '2026-01-01' AND '2026-12-31' AND `role` IN ('admin', 'editor')"
+            . ' GROUP BY `users`.`id` ORDER BY `created_at` DESC LIMIT 10 OFFSET 20',
+            $builder->debugQuery(),
+        );
+        self::assertSame(
             ['active', '2026-01-01', '2026-12-31', 'admin', 'editor'],
             $builder->getBindings(),
         );
@@ -42,7 +48,20 @@ final class QueryBuilderTest extends TestCase
         $builder = (new QueryBuilder())->from('users');
 
         self::assertSame('SELECT * FROM `users`', $builder->toSql());
+        self::assertSame('SELECT * FROM `users`', $builder->debugQuery());
         self::assertSame([], $builder->getBindings());
+    }
+
+    public function testToRawSqlEscapesStringBindings(): void
+    {
+        $builder = (new QueryBuilder())
+            ->from('users')
+            ->where('email', '=', "o'reilly@example.com");
+
+        self::assertSame(
+            "SELECT * FROM `users` WHERE `email` = 'o''reilly@example.com'",
+            $builder->debugQuery(),
+        );
     }
 
     public function testResetClearsState(): void

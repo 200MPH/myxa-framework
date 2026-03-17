@@ -6,10 +6,12 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use Myxa\Database\DB;
+use Myxa\Database\DatabaseException;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Database\QueryBuilder;
 use Myxa\Database\RawExpression;
+use Myxa\Database\SqlInterpolator;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -18,7 +20,9 @@ use RuntimeException;
 use stdClass;
 
 #[CoversClass(DB::class)]
+#[CoversClass(DatabaseException::class)]
 #[CoversClass(RawExpression::class)]
+#[CoversClass(SqlInterpolator::class)]
 final class DBTest extends TestCase
 {
     private const string CONNECTION_ALIAS = 'db-test';
@@ -156,6 +160,48 @@ final class DBTest extends TestCase
         self::assertInstanceOf(QueryBuilder::class, DB::query());
     }
 
+    public function testToRawSqlInterpolatesPositionalBindings(): void
+    {
+        $sql = DB::toRawSql(
+            'SELECT id FROM users WHERE status = ? AND email = ?',
+            ['active', "o'reilly@example.com"],
+            self::CONNECTION_ALIAS,
+        );
+
+        self::assertSame(
+            "SELECT id FROM users WHERE status = 'active' AND email = 'o''reilly@example.com'",
+            $sql,
+        );
+    }
+
+    public function testToRawSqlInterpolatesNamedBindings(): void
+    {
+        $sql = DB::toRawSql(
+            'SELECT id FROM users WHERE status = :status AND id > :minimum_id',
+            ['status' => 'inactive', ':minimum_id' => 1],
+            self::CONNECTION_ALIAS,
+        );
+
+        self::assertSame(
+            "SELECT id FROM users WHERE status = 'inactive' AND id > 1",
+            $sql,
+        );
+    }
+
+    public function testToRawSqlDoesNotReplacePlaceholdersInsideQuotedStrings(): void
+    {
+        $sql = DB::toRawSql(
+            "SELECT '?' AS marker, ':status' AS text, status FROM users WHERE status = :status",
+            ['status' => 'active'],
+            self::CONNECTION_ALIAS,
+        );
+
+        self::assertSame(
+            "SELECT '?' AS marker, ':status' AS text, status FROM users WHERE status = 'active'",
+            $sql,
+        );
+    }
+
     public function testBeginTransactionAndCommitPersistChanges(): void
     {
         self::assertTrue(DB::beginTransaction(self::CONNECTION_ALIAS));
@@ -258,6 +304,24 @@ final class DBTest extends TestCase
             [new stdClass()],
             self::CONNECTION_ALIAS,
         );
+    }
+
+    public function testStatementWrapsPdoFailuresInDatabaseException(): void
+    {
+        try {
+            DB::statement(
+                'INSERT INTO missing_table (email) VALUES (?)',
+                ['john@example.com'],
+                self::CONNECTION_ALIAS,
+            );
+
+            self::fail('Expected DatabaseException for invalid SQL.');
+        } catch (DatabaseException $exception) {
+            self::assertSame('Database query failed on connection "db-test".', $exception->getMessage());
+            self::assertSame('INSERT INTO missing_table (email) VALUES (?)', $exception->getSql());
+            self::assertSame(self::CONNECTION_ALIAS, $exception->getConnection());
+            self::assertNotNull($exception->getPrevious());
+        }
     }
 
     private function makeInMemoryConnection(): PdoConnection

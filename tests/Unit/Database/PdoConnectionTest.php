@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Test\Unit\Database;
 
+use Myxa\Database\DatabaseConnectionException;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Database\ConnectionInterface;
 use Myxa\Database\TransactionalConnectionInterface;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+#[CoversClass(DatabaseConnectionException::class)]
+#[CoversClass(PdoConnection::class)]
 final class PdoConnectionTest extends TestCase
 {
     protected function setUp(): void
@@ -95,7 +99,7 @@ final class PdoConnectionTest extends TestCase
         self::assertSame('app_user', $connection->getPdoConnectionConfig()->getUsername());
     }
 
-    public function testConnectThrowsRuntimeExceptionForInvalidDriver(): void
+    public function testConnectThrowsDatabaseConnectionExceptionForInvalidDriver(): void
     {
         if (!class_exists('PDO')) {
             $this->markTestSkipped('PDO extension is not available.');
@@ -109,9 +113,15 @@ final class PdoConnectionTest extends TestCase
             ),
         );
 
-        $this->expectException(RuntimeException::class);
+        try {
+            $connection->connect();
 
-        $connection->connect();
+            self::fail('Expected DatabaseConnectionException for invalid driver.');
+        } catch (DatabaseConnectionException $exception) {
+            self::assertSame('Failed to establish database connection.', $exception->getMessage());
+            self::assertSame('definitely_invalid_driver:dbname=app_db;host=127.0.0.1', $exception->getDsn());
+            self::assertNotNull($exception->getPrevious());
+        }
     }
 
     public function testIsConnectedIsFalseBeforeConnect(): void

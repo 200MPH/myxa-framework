@@ -6,6 +6,7 @@ namespace Myxa\Database;
 
 use InvalidArgumentException;
 use PDO;
+use PDOException;
 use PDOStatement;
 use RuntimeException;
 use SensitiveParameter;
@@ -34,6 +35,21 @@ final class DB
     public static function raw(string $expression): RawExpression
     {
         return new RawExpression($expression);
+    }
+
+    /**
+     * Render SQL with bindings inlined for debugging.
+     * Unsafe for logs, exceptions, or user-facing output because real binding values are included.
+     *
+     * @param array<int|string, scalar|null> $bindings
+     */
+    public static function toRawSql(
+        string $sql,
+        #[SensitiveParameter]
+        array $bindings = [],
+        string $connection = 'main',
+    ): string {
+        return SqlInterpolator::interpolate($sql, $bindings, self::pdo($connection));
     }
 
     public static function beginTransaction(string $connection = 'main'): bool
@@ -78,6 +94,7 @@ final class DB
      *
      * @param array<int|string, scalar|null> $bindings
      * @return list<array<string, mixed>>
+     * @throws DatabaseException
      */
     public static function select(
         string $sql,
@@ -85,19 +102,22 @@ final class DB
         array $bindings = [],
         string $connection = 'main',
     ): array {
-        $statement = self::prepare($sql, $bindings, $connection);
-        $statement->execute();
+        return self::runQuery($sql, $connection, function () use ($sql, $bindings, $connection): array {
+            $statement = self::prepare($sql, $bindings, $connection);
+            $statement->execute();
 
-        /** @var list<array<string, mixed>> $result */
-        $result = $statement->fetchAll(PDO::FETCH_ASSOC);
+            /** @var list<array<string, mixed>> $result */
+            $result = $statement->fetchAll(PDO::FETCH_ASSOC);
 
-        return $result;
+            return $result;
+        });
     }
 
     /**
      * Execute raw SQL statement.
      *
      * @param array<int|string, scalar|null> $bindings
+     * @throws DatabaseException
      */
     public static function statement(
         string $sql,
@@ -105,15 +125,18 @@ final class DB
         array $bindings = [],
         string $connection = 'main',
     ): bool {
-        $statement = self::prepare($sql, $bindings, $connection);
+        return self::runQuery($sql, $connection, function () use ($sql, $bindings, $connection): bool {
+            $statement = self::prepare($sql, $bindings, $connection);
 
-        return $statement->execute();
+            return $statement->execute();
+        });
     }
 
     /**
      * Execute INSERT query and return last inserted ID.
      *
      * @param array<int|string, scalar|null> $bindings
+     * @throws DatabaseException
      */
     public static function insert(
         string $sql,
@@ -121,28 +144,31 @@ final class DB
         array $bindings = [],
         string $connection = 'main',
     ): string|int {
-        $statement = self::prepare($sql, $bindings, $connection);
-        $statement->execute();
+        return self::runQuery($sql, $connection, function () use ($sql, $bindings, $connection): string|int {
+            $statement = self::prepare($sql, $bindings, $connection);
+            $statement->execute();
 
-        $lastInsertId = self::pdo($connection)->lastInsertId();
-        if ($lastInsertId === false) {
-            throw new RuntimeException('Unable to fetch last insert ID.');
-        }
-
-        if (ctype_digit($lastInsertId)) {
-            $asInt = (int) $lastInsertId;
-            if ((string) $asInt === $lastInsertId) {
-                return $asInt;
+            $lastInsertId = self::pdo($connection)->lastInsertId();
+            if ($lastInsertId === false) {
+                throw new RuntimeException('Unable to fetch last insert ID.');
             }
-        }
 
-        return $lastInsertId;
+            if (ctype_digit($lastInsertId)) {
+                $asInt = (int) $lastInsertId;
+                if ((string) $asInt === $lastInsertId) {
+                    return $asInt;
+                }
+            }
+
+            return $lastInsertId;
+        });
     }
 
     /**
      * Execute UPDATE query and return affected rows.
      *
      * @param array<int|string, scalar|null> $bindings
+     * @throws DatabaseException
      */
     public static function update(
         string $sql,
@@ -157,6 +183,7 @@ final class DB
      * Execute DELETE query and return affected rows.
      *
      * @param array<int|string, scalar|null> $bindings
+     * @throws DatabaseException
      */
     public static function delete(
         string $sql,
@@ -169,6 +196,7 @@ final class DB
 
     /**
      * @param array<int|string, scalar|null> $bindings
+     * @throws DatabaseException
      */
     private static function executeAffectingStatement(
         string $sql,
@@ -176,10 +204,12 @@ final class DB
         array $bindings,
         string $connection,
     ): int {
-        $statement = self::prepare($sql, $bindings, $connection);
-        $statement->execute();
+        return self::runQuery($sql, $connection, function () use ($sql, $bindings, $connection): int {
+            $statement = self::prepare($sql, $bindings, $connection);
+            $statement->execute();
 
-        return $statement->rowCount();
+            return $statement->rowCount();
+        });
     }
 
     /**
@@ -202,6 +232,21 @@ final class DB
         }
 
         return $statement;
+    }
+
+    /**
+     * @template TResult
+     * @param callable(): TResult $callback
+     * @return TResult
+     * @throws DatabaseException
+     */
+    private static function runQuery(string $sql, string $connection, callable $callback): mixed
+    {
+        try {
+            return $callback();
+        } catch (PDOException $exception) {
+            throw DatabaseException::fromPdoException($exception, $sql, $connection);
+        }
     }
 
     /**

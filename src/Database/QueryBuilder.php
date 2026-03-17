@@ -187,6 +187,11 @@ final class QueryBuilder
         return $sql;
     }
 
+    public function debugQuery(): string
+    {
+        return SqlInterpolator::interpolate($this->toSql(), $this->bindings);
+    }
+
     public function reset(): self
     {
         $this->selectColumns = ['*'];

@@ -117,7 +117,7 @@ final class PdoConnection implements TransactionalConnectionInterface
     /**
      * Establish (or return existing) PDO connection.
      *
-     * @throws RuntimeException When PDO connection cannot be established.
+     * @throws DatabaseConnectionException When PDO connection cannot be established.
      */
     public function connect(): PDO
     {
@@ -139,7 +139,7 @@ final class PdoConnection implements TransactionalConnectionInterface
                 $options,
             );
         } catch (PDOException $exception) {
-            throw new RuntimeException('Failed to establish database connection.', previous: $exception);
+            throw DatabaseConnectionException::fromPdoException($exception, $this->config->getDsn());
         }
 
         return $this->pdo;

@@ -26,7 +26,6 @@
     "phpunit/phpunit": "^11.5"
   },
   "scripts": {
-    "test": "vendor/bin/phpunit -c phpunit.xml",
     "test:unit": "vendor/bin/phpunit -c phpunit.xml tests/Unit",
     "phpstan": "vendor/bin/phpstan analyse src",
     "phpcs": "vendor/bin/phpcs",
