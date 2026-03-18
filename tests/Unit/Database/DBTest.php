@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use InvalidArgumentException;
-use Myxa\Database\DB;
 use Myxa\Database\DatabaseException;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Database\QueryBuilder;
 use Myxa\Database\RawExpression;
 use Myxa\Database\SqlInterpolator;
+use Myxa\Support\Facades\DB;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
