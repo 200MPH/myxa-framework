@@ -19,6 +19,21 @@ docker compose run --rm php composer install
 docker compose run --rm php composer test:unit
 ```
 
+### Run unit test coverage
+
+The PHP CLI image ships with `PCOV`, a lightweight code coverage driver.
+
+```bash
+docker compose build php
+docker compose run --rm php composer test:coverage
+```
+
+For an HTML report:
+
+```bash
+docker compose run --rm php vendor/bin/phpunit -c phpunit.xml tests/Unit --coverage-html build/coverage --coverage-filter src
+```
+
 ### Start containers
 
 ```bash

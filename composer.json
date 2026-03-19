@@ -28,6 +28,7 @@
   },
   "scripts": {
     "test:unit": "vendor/bin/phpunit -c phpunit.xml tests/Unit",
+    "test:coverage": "vendor/bin/phpunit -c phpunit.xml tests/Unit --coverage-text --coverage-filter src",
     "phpstan": "vendor/bin/phpstan analyse src",
     "phpcs": "vendor/bin/phpcs",
     "phpcbf": "vendor/bin/phpcbf",
