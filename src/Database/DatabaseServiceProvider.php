@@ -31,7 +31,7 @@ final class DatabaseServiceProvider extends ServiceProvider
         $connections = $this->connections;
         $defaultConnection = $this->defaultConnection;
 
-        $this->app()->singleton(DatabaseManager::class, static function (Application $app) use (
+        $this->app()->singleton(DatabaseManager::class, static function () use (
             $connections,
             $defaultConnection,
         ): DatabaseManager {
