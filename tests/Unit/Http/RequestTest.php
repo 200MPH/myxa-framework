@@ -76,4 +76,86 @@ final class RequestTest extends TestCase
         self::assertFalse($request->ajax());
         self::assertNull($request->ip());
     }
+
+    public function testRequestParsesAbsoluteUrisForwardedProtocolsAndIpv6Hosts(): void
+    {
+        $request = new Request(
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => 'https://[2001:db8::1]:8443/articles?draft=1',
+                'HTTP_HOST' => '[2001:db8::1]:8443',
+                'HTTP_X_FORWARDED_PROTO' => 'https, http',
+            ],
+        );
+
+        self::assertSame('/articles?draft=1', $request->requestUri());
+        self::assertSame('/articles', $request->path());
+        self::assertSame('draft=1', $request->queryString());
+        self::assertSame('https', $request->scheme());
+        self::assertSame('[2001:db8::1]', $request->host());
+        self::assertSame(8443, $request->port());
+        self::assertSame('https://[2001:db8::1]:8443/articles', $request->url());
+        self::assertSame('https://[2001:db8::1]:8443/articles?draft=1', $request->fullUrl());
+    }
+
+    public function testRequestReturnsFullCollectionsAndFormattedHeaders(): void
+    {
+        $request = new Request(
+            query: ['page' => '1'],
+            post: ['name' => 'Myxa'],
+            cookies: ['theme' => 'forest'],
+            files: ['avatar' => ['name' => 'avatar.png']],
+            server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/profile',
+                'REQUEST_SCHEME' => 'https',
+                'SERVER_PORT' => 'abc',
+                'HTTP_HOST' => 'files.test',
+                'HTTP_ACCEPT_LANGUAGE' => 'en-US',
+                'CONTENT_LENGTH' => '123',
+                'REMOTE_ADDR' => '192.168.1.10',
+            ],
+        );
+
+        self::assertSame(['page' => '1'], $request->query());
+        self::assertSame(['name' => 'Myxa'], $request->post());
+        self::assertSame(['theme' => 'forest'], $request->cookie());
+        self::assertSame(['avatar' => ['name' => 'avatar.png']], $request->file());
+        self::assertSame('forest', $request->cookie('theme'));
+        self::assertSame('fallback', $request->cookie('missing', 'fallback'));
+        self::assertSame('fallback', $request->file('missing', 'fallback'));
+        self::assertSame('192.168.1.10', $request->server('REMOTE_ADDR'));
+        self::assertSame([
+            'Accept-Language' => 'en-US',
+            'Content-Length' => '123',
+            'Host' => 'files.test',
+        ], $request->headers());
+        self::assertSame($request->headers(), $request->header());
+        self::assertSame('en-US', $request->header('accept-language'));
+        self::assertSame('https', $request->scheme());
+        self::assertTrue($request->secure());
+        self::assertSame(443, $request->port());
+    }
+
+    public function testRequestFallsBackToLocalhostAndIgnoresInvalidHeaderEntries(): void
+    {
+        $request = new Request(
+            server: [
+                0 => 'ignore me',
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '   ',
+                'SERVER_NAME' => '   ',
+                'CONTENT_TYPE' => 'application/json',
+                'HTTP_X_COMPLEX' => ['skip me'],
+            ],
+        );
+
+        self::assertSame('/', $request->requestUri());
+        self::assertSame('/', $request->path());
+        self::assertSame('', $request->queryString());
+        self::assertSame('localhost', $request->host());
+        self::assertSame('http://localhost/', $request->url());
+        self::assertSame($request->url(), $request->fullUrl());
+        self::assertSame(['Content-Type' => 'application/json'], $request->headers());
+    }
 }

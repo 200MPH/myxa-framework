@@ -31,7 +31,7 @@ docker compose run --rm php composer test:coverage
 For an HTML report:
 
 ```bash
-docker compose run --rm php vendor/bin/phpunit -c phpunit.xml tests/Unit --coverage-html build/coverage --coverage-filter src
+docker compose run --rm php composer test:coverage:html
 ```
 
 ### Start containers

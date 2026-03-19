@@ -100,6 +100,28 @@ final class ResponseTest extends TestCase
         self::assertSame([], $response->cookies());
     }
 
+    public function testResponseSendOutputsBodyAndHandlesSameSiteCookies(): void
+    {
+        $response = (new Response())
+            ->setHeader('X-App', 'myxa')
+            ->cookie('session', 'token', sameSite: 'strict')
+            ->body('sent');
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+
+        ob_start();
+        $response->send();
+        $output = ob_get_clean();
+
+        self::assertSame('sent', $output);
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+    }
+
     public function testResponseRejectsInvalidStatusCode(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -114,5 +136,21 @@ final class ResponseTest extends TestCase
         $this->expectExceptionMessage('Unsupported SameSite value [sideways].');
 
         (new Response())->cookie('session', 'token', sameSite: 'sideways');
+    }
+
+    public function testResponseRejectsEmptyHeaderName(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Header name cannot be empty.');
+
+        (new Response())->setHeader('   ', 'value');
+    }
+
+    public function testResponseRejectsEmptyCookieName(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Cookie name cannot be empty.');
+
+        (new Response())->cookie('', 'value');
     }
 }

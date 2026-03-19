@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use Myxa\Database\DatabaseConnectionException;
+use Myxa\Database\ConnectionInterface;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
-use Myxa\Database\ConnectionInterface;
 use Myxa\Database\TransactionalConnectionInterface;
+use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use RuntimeException;
 
 #[CoversClass(DatabaseConnectionException::class)]
@@ -139,6 +141,44 @@ final class PdoConnectionTest extends TestCase
         self::assertInstanceOf(TransactionalConnectionInterface::class, $connection);
     }
 
+    public function testConnectionReusesInjectedPdoAndSupportsTransactions(): void
+    {
+        $connection = $this->makeConnectedConnection();
+        $pdo = $connection->connect();
+
+        self::assertSame($pdo, $connection->getPdo());
+        self::assertSame($connection->getPdoConnectionConfig(), $connection->getConfig());
+        self::assertTrue($connection->beginTransaction());
+
+        $connection->getPdo()->exec("INSERT INTO items (name) VALUES ('first')");
+
+        self::assertTrue($connection->commit());
+        self::assertSame(1, (int) $connection->getPdo()->query('SELECT COUNT(*) FROM items')->fetchColumn());
+        self::assertTrue($connection->beginTransaction());
+
+        $connection->getPdo()->exec("INSERT INTO items (name) VALUES ('second')");
+
+        self::assertTrue($connection->rollBack());
+        self::assertSame(1, (int) $connection->getPdo()->query('SELECT COUNT(*) FROM items')->fetchColumn());
+
+        $connection->disconnect();
+
+        self::assertFalse($connection->isConnected());
+    }
+
+    public function testUnregisterDisconnectsConnectionByDefault(): void
+    {
+        $connection = $this->makeConnectedConnection();
+        PdoConnection::register('main', $connection, true);
+
+        self::assertTrue($connection->isConnected());
+
+        PdoConnection::unregister('main');
+
+        self::assertFalse(PdoConnection::has('main'));
+        self::assertFalse($connection->isConnected());
+    }
+
     private function makeConfig(string $database): PdoConnectionConfig
     {
         return new PdoConnectionConfig(
@@ -148,5 +188,20 @@ final class PdoConnectionTest extends TestCase
             username: 'app_user',
             password: 'secret',
         );
+    }
+
+    private function makeConnectedConnection(): PdoConnection
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->exec('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL)');
+
+        $connection = new PdoConnection($this->makeConfig('db_a'));
+
+        $pdoProperty = new ReflectionProperty(PdoConnection::class, 'pdo');
+        $pdoProperty->setValue($connection, $pdo);
+
+        return $connection;
     }
 }
