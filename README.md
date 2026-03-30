@@ -1,7 +1,7 @@
-# Myxa is a tiny, flexible, powerful, and quietly smart PHP Framework
+# Myxa is a tiny, flexible, powerful, and quietly smart PHP Framework Powered by AI
 
 Ultra-light, modern PHP framework built for speed, clarity, and extensibility.
-Inspired by nature. Built for developers.
+Inspired by nature. Built for developers. Powered by AI
 
 ## Docker Setup
 

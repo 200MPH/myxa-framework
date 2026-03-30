@@ -119,6 +119,7 @@ final class ApplicationTest extends TestCase
     {
         $app = new Application();
         $target = new ApplicationTestCallableTarget();
+        $dependency = new ApplicationTestDependency();
 
         self::assertSame(
             'closure:Myxa:app',
@@ -138,8 +139,21 @@ final class ApplicationTest extends TestCase
         );
 
         self::assertSame(
+            'instance:9',
+            $app->call([ApplicationTestCallableTarget::class, 'instanceMethod'], ['value' => 9]),
+        );
+
+        self::assertSame(
             'static:guest',
             $app->call(ApplicationTestCallableTarget::class . '::staticMethod'),
+        );
+
+        self::assertSame(
+            $dependency,
+            $app->call(
+                static fn (ApplicationTestDependency $dependency): ApplicationTestDependency => $dependency,
+                [ApplicationTestDependency::class => $dependency],
+            ),
         );
     }
 

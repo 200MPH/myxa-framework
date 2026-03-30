@@ -146,17 +146,21 @@ class Container implements ContainerInterface
     /**
      * Invoke a callable and auto-resolve any missing class-typed arguments.
      *
-     * @param callable $callable Callable to invoke through the container.
+     * @param mixed $callable Callable target to invoke through the container.
      * @param array<string, mixed> $parameters Named parameter overrides used during invocation.
      *
      * @throws BindingResolutionException
      */
-    public function call(callable $callable, array $parameters = []): mixed
+    public function call(mixed $callable, array $parameters = []): mixed
     {
         [$reflection, $target] = $this->reflectCallable($callable);
         $arguments = $this->resolveParameters($reflection, $parameters);
 
         if ($reflection instanceof ReflectionMethod) {
+            if ($target === null && !$reflection->isStatic()) {
+                $target = $this->make($reflection->getDeclaringClass()->getName());
+            }
+
             return $reflection->invokeArgs($target, $arguments);
         }
 
@@ -233,13 +237,28 @@ class Container implements ContainerInterface
     /**
      * Convert a callable into a reflection object plus optional target object.
      *
-     * @param callable $callable Callable to inspect.
+     * @param mixed $callable Callable target to inspect.
      *
      * @return array{0: ReflectionMethod|ReflectionFunction, 1: object|null}
+     *
+     * @throws BindingResolutionException
      */
-    private function reflectCallable(callable $callable): array
+    private function reflectCallable(mixed $callable): array
     {
         if (is_array($callable)) {
+            if (
+                count($callable) !== 2
+                || !array_key_exists(0, $callable)
+                || !array_key_exists(1, $callable)
+                || (!is_object($callable[0]) && !is_string($callable[0]))
+                || !is_string($callable[1])
+            ) {
+                throw new BindingResolutionException(sprintf(
+                    'Target [%s] is not a valid callable.',
+                    $this->describeCallable($callable),
+                ));
+            }
+
             return [new ReflectionMethod($callable[0], $callable[1]), is_object($callable[0]) ? $callable[0] : null];
         }
 
@@ -249,7 +268,30 @@ class Container implements ContainerInterface
             return [new ReflectionMethod($class, $method), null];
         }
 
-        return [new ReflectionFunction(Closure::fromCallable($callable)), null];
+        if ($callable instanceof Closure || is_callable($callable)) {
+            return [new ReflectionFunction(Closure::fromCallable($callable)), null];
+        }
+
+        throw new BindingResolutionException(sprintf(
+            'Target [%s] is not a valid callable.',
+            $this->describeCallable($callable),
+        ));
+    }
+
+    /**
+     * Create a readable description for invalid callable targets.
+     */
+    private function describeCallable(mixed $callable): string
+    {
+        if (is_object($callable)) {
+            return $callable::class;
+        }
+
+        if (is_array($callable)) {
+            return 'array';
+        }
+
+        return gettype($callable);
     }
 
     /**
@@ -288,6 +330,10 @@ class Container implements ContainerInterface
         $type = $parameter->getType();
         if ($type instanceof ReflectionNamedType && !$type->isBuiltin()) {
             $typeName = $type->getName();
+
+            if (array_key_exists($typeName, $parameters)) {
+                return $parameters[$typeName];
+            }
 
             if ($typeName === ContainerInterface::class || $typeName === self::class || is_a($this, $typeName)) {
                 return $this;
