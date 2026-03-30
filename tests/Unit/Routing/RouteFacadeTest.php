@@ -47,6 +47,43 @@ final class RouteFacadeTest extends TestCase
         );
     }
 
+    public function testFacadeExposesAllRouteRegistrationHelpers(): void
+    {
+        $router = new Router(new Application());
+        RouteFacade::setRouter($router);
+
+        RouteFacade::match(['PUT', 'PATCH'], '/match', static fn (): string => 'match');
+        RouteFacade::add('TRACE', '/trace', static fn (): string => 'trace');
+        RouteFacade::post('/post', static fn (): string => 'post');
+        RouteFacade::put('/put', static fn (): string => 'put');
+        RouteFacade::patch('/patch', static fn (): string => 'patch');
+        RouteFacade::delete('/delete', static fn (): string => 'delete');
+        RouteFacade::options('/options', static fn (): string => 'options');
+        RouteFacade::head('/head', static fn (): string => 'head');
+        RouteFacade::any('/any', static fn (): string => 'any');
+        RouteFacade::middleware(static fn (\Closure $next): string => 'mw|' . $next(), function (): void {
+            RouteFacade::get('/inside', static fn (): string => 'inside');
+        });
+
+        self::assertCount(10, RouteFacade::routes());
+        self::assertTrue(RouteFacade::has('TRACE', '/trace'));
+        self::assertTrue(RouteFacade::has('PATCH', '/match'));
+        self::assertSame('mw|inside', RouteFacade::dispatch(new HttpRequest(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/inside',
+        ])));
+    }
+
+    public function testFacadeThrowsWhenRouterIsMissing(): void
+    {
+        RouteFacade::clearRouter();
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Route facade has not been initialized.');
+
+        RouteFacade::getRouter();
+    }
+
     public function testFacadeMagicCallStaticForwardsToUnderlyingRouter(): void
     {
         $router = new Router(new Application());

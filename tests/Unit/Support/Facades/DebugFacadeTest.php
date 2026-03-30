@@ -49,6 +49,7 @@ final class DebugFacadeTest extends TestCase
             str_replace('\\', '/', $contents),
         );
         self::assertStringContainsString('[framework] => myxa', $contents);
+        self::assertSame($this->logPath, Debug::logPath());
     }
 
     public function testDumpWritesFormattedPayloadAndTerminates(): void
@@ -76,6 +77,32 @@ final class DebugFacadeTest extends TestCase
             str_replace('\\', '/', $contents),
         );
         self::assertStringContainsString('debug me', $contents);
+    }
+
+    public function testDebugCanResetConfiguredStateAndExposeDefaultLogPath(): void
+    {
+        Debug::setLogPath($this->logPath);
+        Debug::clearLogPath();
+
+        self::assertStringEndsWith('/build/debug.log', str_replace('\\', '/', Debug::logPath()));
+    }
+
+    public function testWriteCreatesNestedDirectoriesAndPreservesStringPayloads(): void
+    {
+        $path = sys_get_temp_dir() . '/myxa-debug-' . uniqid('', true) . '/nested/debug.log';
+        Debug::setLogPath($path);
+
+        Debug::write('plain message');
+
+        $contents = file_get_contents($path);
+
+        self::assertIsString($contents);
+        self::assertStringContainsString('plain message', $contents);
+        self::assertDirectoryExists(dirname($path));
+
+        unlink($path);
+        rmdir(dirname($path));
+        rmdir(dirname(dirname($path)));
     }
 }
 

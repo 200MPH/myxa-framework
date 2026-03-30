@@ -46,6 +46,40 @@ final class ConsoleOutputTest extends TestCase
         self::assertStringContainsString('ℹ Readable', $contents);
     }
 
+    public function testPendingMessagesSupportAllLevelsAndExplicitSendDoesNotDuplicateOutput(): void
+    {
+        $stream = fopen('php://temp', 'w+');
+        $output = new ConsoleOutput($stream);
+
+        $warning = $output->warning('Careful')->icon();
+        $warning->send();
+        $warning->send();
+
+        $error = $output->error('Broken')->icon();
+        unset($error);
+
+        rewind($stream);
+        $contents = (string) stream_get_contents($stream);
+
+        self::assertSame(1, substr_count($contents, '! Careful'));
+        self::assertStringContainsString("\033[33m! Careful\033[0m", $contents);
+        self::assertStringContainsString("\033[31m✖ Broken\033[0m", $contents);
+    }
+
+    public function testMessagesCanRenderPlainTextWhenNoStylesAreApplied(): void
+    {
+        $stream = fopen('php://temp', 'w+');
+        $output = new ConsoleOutput($stream, ansi: false);
+        $message = $output->output('Plain text')->icon();
+
+        unset($message);
+        rewind($stream);
+        $contents = (string) stream_get_contents($stream);
+
+        self::assertSame("Plain text" . PHP_EOL, $contents);
+        self::assertSame('unstyled', $output->formatStyled('unstyled', 'unknown'));
+    }
+
     public function testQuietOutputSuppressesMessages(): void
     {
         $stream = fopen('php://temp', 'w+');
@@ -55,6 +89,20 @@ final class ConsoleOutputTest extends TestCase
         rewind($stream);
 
         self::assertSame('', (string) stream_get_contents($stream));
+    }
+
+    public function testWriteRawCanForceOutputInQuietModeAndExposeFlags(): void
+    {
+        $stream = fopen('php://temp', 'w+');
+        $output = new ConsoleOutput($stream, quiet: true, ansi: false);
+
+        $output->writeRaw('forced', force: true);
+
+        rewind($stream);
+
+        self::assertTrue($output->quiet());
+        self::assertFalse($output->ansi());
+        self::assertSame("forced" . PHP_EOL, (string) stream_get_contents($stream));
     }
 
     public function testTableRendersHeadersRowsAndAutoSizedColumns(): void
@@ -110,6 +158,33 @@ final class ConsoleOutputTest extends TestCase
         self::assertStringContainsString('Page 3/3', $contents);
     }
 
+    public function testTablePaginationSupportsPreviousAndArrowControls(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        fwrite($input, "\033[C\n\033[D\nq\n");
+        rewind($input);
+
+        $stream = fopen('php://temp', 'w+');
+        $output = new ConsoleOutput($stream, ansi: false, input: $input);
+
+        $output->table(
+            ['Name'],
+            [
+                ['Ada'],
+                ['Wojtek'],
+                ['Zoe'],
+            ],
+            1,
+        );
+
+        rewind($stream);
+        $contents = (string) stream_get_contents($stream);
+
+        self::assertGreaterThanOrEqual(2, substr_count($contents, 'Page 1/3'));
+        self::assertStringContainsString('Page 2/3', $contents);
+        self::assertStringContainsString('| Wojtek |', $contents);
+    }
+
     public function testTableHeadersRenderWhiteAndBoldWhenAnsiIsEnabled(): void
     {
         $stream = fopen('php://temp', 'w+');
@@ -121,6 +196,26 @@ final class ConsoleOutputTest extends TestCase
         $contents = (string) stream_get_contents($stream);
 
         self::assertStringContainsString("\033[97;1mName\033[0m", $contents);
+    }
+
+    public function testTableRejectsInvalidConfiguration(): void
+    {
+        $output = new ConsoleOutput(fopen('php://temp', 'w+'));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Console table requires at least one header column.');
+
+        $output->table([], []);
+    }
+
+    public function testTableRejectsNonPositivePageSize(): void
+    {
+        $output = new ConsoleOutput(fopen('php://temp', 'w+'));
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Console table page size must be greater than zero.');
+
+        $output->table(['Name'], [['Ada']], 0);
     }
 
     public function testProgressBarRendersInlineWithTimingDetails(): void
@@ -153,5 +248,38 @@ final class ConsoleOutputTest extends TestCase
         self::assertStringContainsString("\rImporting 1/4 (25%) elapsed 00:00:02 remaining 00:00:06 total 00:00:08", $contents);
         self::assertStringContainsString("\rImporting 4/4 (100%) elapsed 00:00:08 remaining 00:00:00 total 00:00:08", $contents);
         self::assertStringEndsWith(PHP_EOL, $contents);
+    }
+
+    public function testProgressHelpersCanRenderWithoutTimingDetails(): void
+    {
+        $stream = fopen('php://temp', 'w+');
+        $output = new ConsoleOutput($stream, ansi: false);
+
+        $output->progressBar(1, 2, 4);
+        $output->progressText('Syncing', 2, 2);
+
+        rewind($stream);
+        $contents = (string) stream_get_contents($stream);
+
+        self::assertStringContainsString("\r[##--] 1/2  50%", $contents);
+        self::assertStringContainsString("\rSyncing 2/2 (100%)", $contents);
+        self::assertStringNotContainsString('elapsed', $contents);
+    }
+
+    public function testProgressHelpersRejectInvalidTotals(): void
+    {
+        $output = new ConsoleOutput(fopen('php://temp', 'w+'));
+
+        try {
+            $output->progressBar(0, 0);
+            self::fail('Expected invalid total exception for progress bar.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Progress total must be greater than zero.', $exception->getMessage());
+        }
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Progress total must be greater than zero.');
+
+        $output->progressText('Importing', 0, 0);
     }
 }

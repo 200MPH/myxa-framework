@@ -9,9 +9,11 @@ use Myxa\Console\CommandRunner;
 use Myxa\Console\ConsoleInput;
 use Myxa\Console\ConsoleKernel;
 use Myxa\Console\ConsoleOutput;
+use Myxa\Console\CommandInterface;
 use Myxa\Console\InputArgument;
 use Myxa\Console\InputOption;
 use Myxa\Container\Container;
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
@@ -110,11 +112,166 @@ final class CommandRunnerTest extends TestCase
         self::assertStringContainsString('Greets a user with an optional title.', $contents);
     }
 
+    public function testListCommandAliasAndMissingHelpTargetAreHandled(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.0.0', $input, $output);
+        $runner->register(new ConsoleTestGreetingCommand());
+
+        self::assertSame(0, $runner->run(['myxa', 'list']));
+        self::assertSame(1, $runner->run(['myxa', 'help', 'missing']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('Commands:', $contents);
+        self::assertStringContainsString('Command [missing] was not found.', $contents);
+    }
+
     public function testKernelRegistersCommandsAndDelegatesExecution(): void
     {
         $kernel = new ConsoleTestKernel();
 
         self::assertSame(0, $kernel->handle(['myxa', 'ping']));
+    }
+
+    public function testRunnerSupportsVersionGlobalHelpAndNamedHelpCommand(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.2.3', $input, $output);
+        $runner->register(new ConsoleTestGreetingCommand());
+
+        self::assertSame(0, $runner->run(['myxa', '--version']));
+        self::assertSame(0, $runner->run(['myxa']));
+        self::assertSame(0, $runner->run(['myxa', 'help', 'greet']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('myxa 1.2.3', $contents);
+        self::assertStringContainsString('Built-in options:', $contents);
+        self::assertStringContainsString('Greets a user with an optional title.', $contents);
+    }
+
+    public function testRunnerHandlesMissingCommandsAndValidationErrors(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.0.0', $input, $output);
+        $runner->register(new ConsoleTestStrictCommand());
+
+        self::assertSame(1, $runner->run(['myxa', 'missing']));
+        self::assertSame(1, $runner->run(['myxa', 'strict']));
+        self::assertSame(1, $runner->run(['myxa', 'strict', 'Ada', 'extra', '--role=admin']));
+        self::assertSame(1, $runner->run(['myxa', 'strict', 'Ada']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('Command [missing] was not found.', $contents);
+        self::assertStringContainsString('Missing required parameter [name].', $contents);
+        self::assertStringContainsString('Too many parameters were provided for command [strict].', $contents);
+        self::assertStringContainsString('Missing required option [--role].', $contents);
+    }
+
+    public function testQuietModeSuppressesUnknownCommandErrors(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.0.0', $input, $output);
+
+        self::assertSame(1, $runner->run(['myxa', 'missing', '--quiet']));
+
+        rewind($output);
+
+        self::assertSame('', (string) stream_get_contents($output));
+    }
+
+    public function testRunnerResolvesCommandClassNamesAndBooleanOptions(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $container = new Container();
+        $runner = new CommandRunner($container, 'myxa', '1.0.0', $input, $output);
+
+        $runner->register(ConsoleTestContainerCommand::class);
+
+        self::assertSame(0, $runner->run(['myxa', 'container', '--force=false']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('force=off', $contents);
+        self::assertArrayHasKey('container', $runner->commands());
+    }
+
+    public function testRunnerTreatsVersionAsNormalOptionWhenCommandIsProvided(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.2.3', $input, $output);
+        $runner->register(new ConsoleTestGreetingCommand());
+
+        self::assertSame(0, $runner->run(['myxa', 'greet', 'Ada', '--title=Engineer', '--version']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('Hello Engineer Ada', $contents);
+        self::assertStringNotContainsString('myxa 1.2.3', $contents);
+    }
+
+    public function testRunnerSupportsMultipleFalseLikeBooleanOptionValues(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.0.0', $input, $output);
+        $runner->register(ConsoleTestContainerCommand::class);
+
+        self::assertSame(0, $runner->run(['myxa', 'container', '--force=0']));
+        self::assertSame(0, $runner->run(['myxa', 'container', '--force=off']));
+        self::assertSame(0, $runner->run(['myxa', 'container', '--force=no']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertSame(3, substr_count($contents, 'force=off'));
+    }
+
+    public function testRunnerRejectsInvalidRegisteredCommands(): void
+    {
+        $runner = new CommandRunner(new Container());
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Console command [%s] must implement %s.',
+            ConsoleTestInvalidCommand::class,
+            CommandInterface::class,
+        ));
+
+        $runner->register(ConsoleTestInvalidCommand::class);
+    }
+
+    public function testRunnerRejectsCommandsWithEmptyNames(): void
+    {
+        $runner = new CommandRunner(new Container());
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Console command name cannot be empty.');
+
+        $runner->register(new class extends Command {
+            public function name(): string
+            {
+                return '   ';
+            }
+
+            protected function handle(): int
+            {
+                return 0;
+            }
+        });
     }
 }
 
@@ -189,4 +346,72 @@ final class ConsoleTestKernel extends ConsoleKernel
             },
         ];
     }
+}
+
+final class ConsoleTestStrictCommand extends Command
+{
+    public function name(): string
+    {
+        return 'strict';
+    }
+
+    public function parameters(): array
+    {
+        return [
+            new InputArgument('name', 'User name'),
+        ];
+    }
+
+    public function options(): array
+    {
+        return [
+            new InputOption('role', 'Required role', acceptsValue: true, required: true),
+        ];
+    }
+
+    protected function handle(): int
+    {
+        return 0;
+    }
+}
+
+final class ConsoleTestContainerCommand extends Command
+{
+    public function __construct(private readonly ConsoleTestDependency $dependency)
+    {
+    }
+
+    public function name(): string
+    {
+        return 'container';
+    }
+
+    public function options(): array
+    {
+        return [
+            new InputOption('force', 'Force flag', acceptsValue: false, default: true),
+        ];
+    }
+
+    protected function handle(): int
+    {
+        $this->output(sprintf(
+            '%s force=%s',
+            $this->dependency->label,
+            $this->option('force') ? 'on' : 'off',
+        ));
+
+        return 0;
+    }
+}
+
+final readonly class ConsoleTestDependency
+{
+    public function __construct(public string $label = 'resolved')
+    {
+    }
+}
+
+final class ConsoleTestInvalidCommand
+{
 }
