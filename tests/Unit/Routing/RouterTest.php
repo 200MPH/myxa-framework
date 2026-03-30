@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Routing;
 
 use Myxa\Application;
+use Myxa\Http\Controller;
 use Myxa\Http\Request as HttpRequest;
 use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteDefinition;
@@ -147,6 +148,30 @@ final class RouterTest extends TestCase
         );
     }
 
+    public function testRouterDispatchesInvokableControllerClassHandlers(): void
+    {
+        $app = new Application();
+        $router = new Router($app);
+
+        $router->any('/users/{id}', RouterTestInvokableController::class);
+
+        self::assertSame(
+            'invokable:get:55',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/users/55',
+            ])),
+        );
+
+        self::assertSame(
+            'invokable:delete:55',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'DELETE',
+                'REQUEST_URI' => '/users/55',
+            ])),
+        );
+    }
+
     public function testRouterReportsMethodNotAllowedAndMissingRoutes(): void
     {
         $router = new Router(new Application());
@@ -208,5 +233,18 @@ final readonly class RouterTestController
     public function showComment(string $postId, string $commentId): string
     {
         return sprintf('comment:%s:%s:%s', $this->dependency->name, $postId, $commentId);
+    }
+}
+
+final class RouterTestInvokableController extends Controller
+{
+    public function get(string $id): string
+    {
+        return 'invokable:get:' . $id;
+    }
+
+    public function delete(string $id): string
+    {
+        return 'invokable:delete:' . $id;
     }
 }

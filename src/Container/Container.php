@@ -157,7 +157,9 @@ class Container implements ContainerInterface
         $arguments = $this->resolveParameters($reflection, $parameters);
 
         if ($reflection instanceof ReflectionMethod) {
-            if ($target === null && !$reflection->isStatic()) {
+            if (is_string($target)) {
+                $target = $this->make($target);
+            } elseif ($target === null && !$reflection->isStatic()) {
                 $target = $this->make($reflection->getDeclaringClass()->getName());
             }
 
@@ -239,7 +241,7 @@ class Container implements ContainerInterface
      *
      * @param mixed $callable Callable target to inspect.
      *
-     * @return array{0: ReflectionMethod|ReflectionFunction, 1: object|null}
+     * @return array{0: ReflectionMethod|ReflectionFunction, 1: object|string|null}
      *
      * @throws BindingResolutionException
      */
@@ -259,13 +261,17 @@ class Container implements ContainerInterface
                 ));
             }
 
-            return [new ReflectionMethod($callable[0], $callable[1]), is_object($callable[0]) ? $callable[0] : null];
+            return [new ReflectionMethod($callable[0], $callable[1]), $callable[0]];
         }
 
         if (is_string($callable) && str_contains($callable, '::')) {
             [$class, $method] = explode('::', $callable, 2);
 
-            return [new ReflectionMethod($class, $method), null];
+            return [new ReflectionMethod($class, $method), $class];
+        }
+
+        if (is_string($callable) && class_exists($callable) && method_exists($callable, '__invoke')) {
+            return [new ReflectionMethod($callable, '__invoke'), $callable];
         }
 
         if ($callable instanceof Closure || is_callable($callable)) {
