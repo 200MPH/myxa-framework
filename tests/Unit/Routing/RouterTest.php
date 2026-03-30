@@ -7,6 +7,7 @@ namespace Test\Unit\Routing;
 use Myxa\Application;
 use Myxa\Http\Controller;
 use Myxa\Http\Request as HttpRequest;
+use Myxa\Middleware\MiddlewareInterface;
 use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteDefinition;
 use Myxa\Routing\RouteNotFoundException;
@@ -172,6 +173,79 @@ final class RouterTest extends TestCase
         );
     }
 
+    public function testRouterRunsRouteAndGroupMiddlewareAroundHandlers(): void
+    {
+        $app = new Application();
+        $router = new Router($app);
+
+        $router->group('/api', function (Router $router): void {
+            $router->get('/users/{id}', static fn (string $id): string => 'handler:' . $id)
+                ->middleware(
+                    static function (string $id, \Closure $next): string {
+                        return 'route-before:' . $id . '|' . $next() . '|route-after:' . $id;
+                    },
+                );
+        }, static function (HttpRequest $request, \Closure $next): string {
+            return 'group-before:' . $request->path() . '|' . $next() . '|group-after';
+        });
+
+        self::assertSame(
+            'group-before:/api/users/42|route-before:42|handler:42|route-after:42|group-after',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/api/users/42',
+            ])),
+        );
+    }
+
+    public function testRouterSupportsClassMiddlewareAndShortCircuitResponses(): void
+    {
+        $app = new Application();
+        $app->instance(RouterTestDependency::class, new RouterTestDependency('middleware'));
+        $router = new Router($app);
+
+        $router->get('/posts/{id}', static fn (string $id): string => 'handler:' . $id)
+            ->middleware(RouterTestClassMiddleware::class);
+
+        $router->get('/blocked', static fn (): string => 'handler')
+            ->middleware(RouterTestBlockingMiddleware::class);
+
+        self::assertSame(
+            'middleware:8|handler:8|after',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/posts/8',
+            ])),
+        );
+
+        self::assertSame(
+            'blocked:/blocked',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/blocked',
+            ])),
+        );
+    }
+
+    public function testRouterSupportsMiddlewareOnlyGroups(): void
+    {
+        $router = new Router(new Application());
+
+        $router->middleware(static function (\Closure $next): string {
+            return 'outer|' . $next() . '|done';
+        }, function (Router $router): void {
+            $router->get('/health', static fn (): string => 'ok');
+        });
+
+        self::assertSame(
+            'outer|ok|done',
+            $router->dispatch(new HttpRequest(server: [
+                'REQUEST_METHOD' => 'GET',
+                'REQUEST_URI' => '/health',
+            ])),
+        );
+    }
+
     public function testRouterReportsMethodNotAllowedAndMissingRoutes(): void
     {
         $router = new Router(new Application());
@@ -246,5 +320,32 @@ final class RouterTestInvokableController extends Controller
     public function delete(string $id): string
     {
         return 'invokable:delete:' . $id;
+    }
+}
+
+final readonly class RouterTestClassMiddleware implements MiddlewareInterface
+{
+    public function __construct(private RouterTestDependency $dependency)
+    {
+    }
+
+    public function handle(HttpRequest $request, \Closure $next, RouteDefinition $route): string
+    {
+        $parameters = $route->parametersForPath($request->path()) ?? [];
+
+        return sprintf(
+            '%s:%s|%s|after',
+            $this->dependency->name,
+            $parameters['id'] ?? 'missing',
+            $next(),
+        );
+    }
+}
+
+final class RouterTestBlockingMiddleware implements MiddlewareInterface
+{
+    public function handle(HttpRequest $request, \Closure $next, RouteDefinition $route): string
+    {
+        return 'blocked:' . $request->path();
     }
 }

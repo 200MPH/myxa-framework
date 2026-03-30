@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Myxa\Routing;
 
+use Closure;
 use InvalidArgumentException;
 use Myxa\Container\Container;
 use Myxa\Http\Request;
+use Myxa\Middleware\MiddlewareInterface;
 
 /**
  * Small in-memory router for registering and dispatching request handlers.
@@ -22,6 +24,11 @@ final class Router
      * @var list<string>
      */
     private array $groupPrefixes = [];
+
+    /**
+     * @var list<list<mixed>>
+     */
+    private array $groupMiddlewares = [];
 
     public function __construct(private readonly Container $container)
     {
@@ -41,6 +48,7 @@ final class Router
             $this->normalizeMethods($methods),
             $this->applyGroupPrefix($path),
             $handler,
+            $this->currentGroupMiddlewares(),
         );
 
         $this->routes[] = $route;
@@ -145,9 +153,10 @@ final class Router
     /**
      * Register a nested route group with a shared path prefix.
      */
-    public function group(string $prefix, callable $routes): void
+    public function group(string $prefix, callable $routes, mixed $middlewares = []): void
     {
         $this->groupPrefixes[] = $this->normalizePrefix($prefix);
+        $this->groupMiddlewares[] = $this->normalizeMiddlewares($middlewares);
 
         try {
             $this->container->call($routes, [
@@ -155,7 +164,25 @@ final class Router
                 'router' => $this,
             ]);
         } finally {
+            array_pop($this->groupMiddlewares);
             array_pop($this->groupPrefixes);
+        }
+    }
+
+    /**
+     * Register a middleware-only group without adding a path prefix.
+     */
+    public function middleware(mixed $middlewares, callable $routes): void
+    {
+        $this->groupMiddlewares[] = $this->normalizeMiddlewares($middlewares);
+
+        try {
+            $this->container->call($routes, [
+                self::class => $this,
+                'router' => $this,
+            ]);
+        } finally {
+            array_pop($this->groupMiddlewares);
         }
     }
 
@@ -208,8 +235,7 @@ final class Router
     {
         $request ??= $this->container->make(Request::class);
         [$route, $routeParameters] = $this->resolve($request->method(), $request->path());
-
-        return $this->container->call($route->handler(), [
+        $context = [
             ...$parameters,
             ...$routeParameters,
             Request::class => $request,
@@ -218,7 +244,18 @@ final class Router
             'request' => $request,
             'route' => $route,
             'router' => $this,
-        ]);
+            'parameters' => $routeParameters,
+            'routeParameters' => $routeParameters,
+        ];
+
+        $pipeline = fn (): mixed => $this->container->call($route->handler(), $context);
+
+        foreach (array_reverse($route->middlewares()) as $middleware) {
+            $next = $pipeline;
+            $pipeline = fn (): mixed => $this->callMiddleware($middleware, $request, $route, $routeParameters, $next);
+        }
+
+        return $pipeline();
     }
 
     /**
@@ -349,5 +386,100 @@ final class Router
         }
 
         return $this->normalizePath($prefix . $normalizedPath);
+    }
+
+    /**
+     * Flatten the current nested group middleware stack.
+     *
+     * @return list<mixed>
+     */
+    private function currentGroupMiddlewares(): array
+    {
+        $middlewares = [];
+
+        foreach ($this->groupMiddlewares as $groupMiddlewares) {
+            $middlewares = [...$middlewares, ...$groupMiddlewares];
+        }
+
+        return $middlewares;
+    }
+
+    /**
+     * Normalize middleware input into a flat list.
+     *
+     * @return list<mixed>
+     */
+    private function normalizeMiddlewares(mixed $middlewares): array
+    {
+        if ($middlewares === [] || $middlewares === null) {
+            return [];
+        }
+
+        if (!is_array($middlewares)) {
+            return [$middlewares];
+        }
+
+        $normalized = [];
+
+        foreach ($middlewares as $middleware) {
+            if (is_array($middleware)) {
+                $normalized = [...$normalized, ...$this->normalizeMiddlewares($middleware)];
+                continue;
+            }
+
+            $normalized[] = $middleware;
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * Invoke a single middleware definition.
+     *
+     * @param array<string, string> $routeParameters
+     */
+    private function callMiddleware(
+        mixed $middleware,
+        Request $request,
+        RouteDefinition $route,
+        array $routeParameters,
+        Closure $next,
+    ): mixed {
+        $target = $this->resolveMiddlewareTarget($middleware);
+
+        return $this->container->call($target, [
+            ...$routeParameters,
+            Request::class => $request,
+            RouteDefinition::class => $route,
+            self::class => $this,
+            'request' => $request,
+            'route' => $route,
+            'router' => $this,
+            'next' => $next,
+            'parameters' => $routeParameters,
+            'routeParameters' => $routeParameters,
+        ]);
+    }
+
+    /**
+     * Resolve middleware classes to an invokable callable target.
+     */
+    private function resolveMiddlewareTarget(mixed $middleware): mixed
+    {
+        if (is_string($middleware) && class_exists($middleware)) {
+            if (is_subclass_of($middleware, MiddlewareInterface::class) || method_exists($middleware, 'handle')) {
+                return [$middleware, 'handle'];
+            }
+
+            return $middleware;
+        }
+
+        if (is_object($middleware) && !$middleware instanceof Closure) {
+            if ($middleware instanceof MiddlewareInterface || method_exists($middleware, 'handle')) {
+                return [$middleware, 'handle'];
+            }
+        }
+
+        return $middleware;
     }
 }

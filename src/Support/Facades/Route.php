@@ -146,9 +146,17 @@ final class Route
     /**
      * Register a grouped set of routes behind a shared prefix.
      */
-    public static function group(string $prefix, callable $routes): void
+    public static function group(string $prefix, callable $routes, mixed $middlewares = []): void
     {
-        self::getRouter()->group($prefix, $routes);
+        self::getRouter()->group($prefix, $routes, $middlewares);
+    }
+
+    /**
+     * Register a middleware-only group.
+     */
+    public static function middleware(mixed $middlewares, callable $routes): void
+    {
+        self::getRouter()->middleware($middlewares, $routes);
     }
 
     /**

@@ -9,16 +9,23 @@ use InvalidArgumentException;
 /**
  * Immutable route record used by the router during matching and dispatch.
  */
-final readonly class RouteDefinition
+final class RouteDefinition
 {
+    /**
+     * @var list<mixed>
+     */
+    private array $middlewares = [];
+
     /**
      * @param list<string> $methods
      * @param mixed $handler
+     * @param list<mixed> $middlewares
      */
     public function __construct(
         private array $methods,
         private string $path,
         private mixed $handler,
+        array $middlewares = [],
     ) {
         $parameterNames = $this->parameterNames();
 
@@ -28,6 +35,8 @@ final readonly class RouteDefinition
                 $this->path,
             ));
         }
+
+        $this->middlewares = array_values($middlewares);
     }
 
     /**
@@ -56,6 +65,35 @@ final readonly class RouteDefinition
     public function handler(): mixed
     {
         return $this->handler;
+    }
+
+    /**
+     * Append one or many middleware definitions to this route.
+     *
+     * @param mixed ...$middlewares
+     */
+    public function middleware(mixed ...$middlewares): self
+    {
+        foreach ($middlewares as $middleware) {
+            if (is_array($middleware)) {
+                $this->middlewares = [...$this->middlewares, ...array_values($middleware)];
+                continue;
+            }
+
+            $this->middlewares[] = $middleware;
+        }
+
+        return $this;
+    }
+
+    /**
+     * Return the route middleware stack.
+     *
+     * @return list<mixed>
+     */
+    public function middlewares(): array
+    {
+        return $this->middlewares;
     }
 
     /**

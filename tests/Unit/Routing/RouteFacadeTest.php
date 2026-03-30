@@ -6,6 +6,7 @@ namespace Test\Unit\Routing;
 
 use Myxa\Application;
 use Myxa\Http\Request as HttpRequest;
+use Myxa\Middleware\MiddlewareInterface;
 use Myxa\Routing\RouteDefinition;
 use Myxa\Routing\Router;
 use Myxa\Support\Facades\Route as RouteFacade;
@@ -30,14 +31,15 @@ final class RouteFacadeTest extends TestCase
         RouteFacade::setRouter($router);
 
         RouteFacade::group('/api', function (): void {
-            RouteFacade::get('/users/{id}', static fn (string $id): string => 'user:' . $id);
+            RouteFacade::get('/users/{id}', static fn (string $id): string => 'user:' . $id)
+                ->middleware(RouteFacadeTestMiddleware::class);
         });
 
         self::assertSame($router, RouteFacade::getRouter());
         self::assertTrue(RouteFacade::has('GET', '/api/users/12'));
         self::assertSame('/api/users/{id}', RouteFacade::find('GET', '/api/users/12')->path());
         self::assertSame(
-            'user:12',
+            'before|user:12|after',
             RouteFacade::dispatch(new HttpRequest(server: [
                 'REQUEST_METHOD' => 'GET',
                 'REQUEST_URI' => '/api/users/12',
@@ -53,5 +55,13 @@ final class RouteFacadeTest extends TestCase
         RouteFacade::setRouter($router);
 
         self::assertTrue(RouteFacade::__callStatic('has', ['GET', '/magic']));
+    }
+}
+
+final class RouteFacadeTestMiddleware implements MiddlewareInterface
+{
+    public function handle(HttpRequest $request, \Closure $next, RouteDefinition $route): string
+    {
+        return 'before|' . $next() . '|after';
     }
 }

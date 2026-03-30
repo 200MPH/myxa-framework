@@ -158,7 +158,7 @@ class Container implements ContainerInterface
 
         if ($reflection instanceof ReflectionMethod) {
             if (is_string($target)) {
-                $target = $this->make($target);
+                $target = $reflection->isStatic() ? null : $this->make($target);
             } elseif ($target === null && !$reflection->isStatic()) {
                 $target = $this->make($reflection->getDeclaringClass()->getName());
             }
