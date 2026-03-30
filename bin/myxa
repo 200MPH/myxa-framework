@@ -1,0 +1,34 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Myxa\Console\ConsoleKernel;
+
+$autoload = __DIR__ . '/../vendor/autoload.php';
+
+if (!file_exists($autoload)) {
+    fwrite(STDERR, "Unable to locate Composer autoload file.\n");
+
+    exit(1);
+}
+
+require $autoload;
+
+$bootstrap = getcwd() . '/bootstrap/console.php';
+
+if (!file_exists($bootstrap)) {
+    fwrite(STDERR, "Unable to locate console bootstrap at bootstrap/console.php.\n");
+
+    exit(1);
+}
+
+$kernel = require $bootstrap;
+
+if (!$kernel instanceof ConsoleKernel) {
+    fwrite(STDERR, "Console bootstrap must return an instance of Myxa\\\\Console\\\\ConsoleKernel.\n");
+
+    exit(1);
+}
+
+exit($kernel->handle($_SERVER['argv'] ?? $argv));

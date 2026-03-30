@@ -9,6 +9,9 @@
       "email": "wojciech.brozyna@gmail.com"
     }
   ],
+  "bin": [
+    "bin/myxa"
+  ],
   "autoload": {
     "psr-4": {
       "Myxa\\": "src/",
