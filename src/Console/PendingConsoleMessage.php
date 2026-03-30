@@ -21,12 +21,18 @@ final class PendingConsoleMessage
 
     private bool $sent = false;
 
+    /**
+     * Create a fluent message builder for the provided text.
+     */
     public function __construct(
         private readonly ConsoleOutput $output,
         private readonly string $text,
     ) {
     }
 
+    /**
+     * Mark the message as successful and render it in success styling.
+     */
     public function success(): self
     {
         $this->level = 'success';
@@ -34,6 +40,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Mark the message as a warning and render it in warning styling.
+     */
     public function warning(): self
     {
         $this->level = 'warning';
@@ -41,6 +50,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Mark the message as an error and render it in error styling.
+     */
     public function error(): self
     {
         $this->level = 'error';
@@ -48,6 +60,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Mark the message as informational and render it in info styling.
+     */
     public function info(): self
     {
         $this->level = 'info';
@@ -55,6 +70,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Render the message in bold text.
+     */
     public function bold(): self
     {
         $this->bold = true;
@@ -62,6 +80,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Render the message with underline decoration.
+     */
     public function underline(): self
     {
         $this->underline = true;
@@ -69,6 +90,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Render the message with strike-through decoration.
+     */
     public function strike(): self
     {
         $this->strike = true;
@@ -76,6 +100,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Prefix the message with an icon matching its semantic level.
+     */
     public function icon(): self
     {
         $this->icon = true;
@@ -83,6 +110,9 @@ final class PendingConsoleMessage
         return $this;
     }
 
+    /**
+     * Render the message immediately if it has not already been sent.
+     */
     public function send(): void
     {
         if ($this->sent) {
@@ -93,6 +123,9 @@ final class PendingConsoleMessage
         $this->sent = true;
     }
 
+    /**
+     * Render the message automatically when the fluent builder goes out of scope.
+     */
     public function __destruct()
     {
         $this->send();

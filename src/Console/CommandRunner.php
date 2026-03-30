@@ -19,6 +19,8 @@ final class CommandRunner
     private array $commands = [];
 
     /**
+     * Create the console runner with its DI container and terminal streams.
+     *
      * @param resource|null $input
      * @param resource|null $output
      */
@@ -66,6 +68,8 @@ final class CommandRunner
 
     /**
      * Run the console program with the provided argv values.
+     *
+     * @param list<string> $argv
      */
     public function run(array $argv): int
     {

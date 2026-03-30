@@ -13,21 +13,37 @@ abstract class Command implements CommandInterface
 
     private ConsoleOutput $output;
 
+    /**
+     * Return a short human-readable command summary.
+     */
     public function description(): string
     {
         return '';
     }
 
+    /**
+     * Return the positional parameters accepted by the command.
+     *
+     * @return list<InputArgument>
+     */
     public function parameters(): array
     {
         return [];
     }
 
+    /**
+     * Return the long-form options accepted by the command.
+     *
+     * @return list<InputOption>
+     */
     public function options(): array
     {
         return [];
     }
 
+    /**
+     * Bootstrap the command with parsed input/output and execute its handler.
+     */
     final public function run(ConsoleInput $input, ConsoleOutput $output): int
     {
         $this->input = $input;

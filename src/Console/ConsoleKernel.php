@@ -13,6 +13,9 @@ abstract class ConsoleKernel
 {
     private readonly CommandRunner $runner;
 
+    /**
+     * Create the console kernel and register all configured commands.
+     */
     public function __construct(
         ?Container $container = null,
         string $programName = 'myxa',
@@ -35,6 +38,8 @@ abstract class ConsoleKernel
 
     /**
      * Execute the console kernel with the provided argv input.
+     *
+     * @param list<string> $argv
      */
     public function handle(array $argv): int
     {

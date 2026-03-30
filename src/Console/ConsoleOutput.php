@@ -15,6 +15,7 @@ final class ConsoleOutput
 
     /**
      * @param resource $stream
+     * @param resource|null $input
      */
     public function __construct(
         private mixed $stream,
@@ -25,26 +26,41 @@ final class ConsoleOutput
         $this->input ??= fopen('php://stdin', 'rb');
     }
 
+    /**
+     * Start building a fluent console message.
+     */
     public function output(string $text): PendingConsoleMessage
     {
         return new PendingConsoleMessage($this, $text);
     }
 
+    /**
+     * Start building a success-styled console message.
+     */
     public function success(string $text): PendingConsoleMessage
     {
         return $this->output($text)->success();
     }
 
+    /**
+     * Start building a warning-styled console message.
+     */
     public function warning(string $text): PendingConsoleMessage
     {
         return $this->output($text)->warning();
     }
 
+    /**
+     * Start building an error-styled console message.
+     */
     public function error(string $text): PendingConsoleMessage
     {
         return $this->output($text)->error();
     }
 
+    /**
+     * Start building an info-styled console message.
+     */
     public function info(string $text): PendingConsoleMessage
     {
         return $this->output($text)->info();
@@ -103,6 +119,7 @@ final class ConsoleOutput
      *
      * @param list<string> $headers
      * @param list<array<int|string, scalar|null>> $rows
+     * @param int|null $pageSize Optional number of data rows per page.
      */
     public function table(array $headers, array $rows, ?int $pageSize = null): void
     {
@@ -190,6 +207,12 @@ final class ConsoleOutput
 
     /**
      * Render a one-line progress bar and update it in place.
+     *
+     * @param int $current Current completed units.
+     * @param int $total Total units to complete.
+     * @param int $width Width of the rendered progress bar body.
+     * @param float|null $startedAt Optional start timestamp from microtime(true).
+     * @param float|null $currentTime Optional current timestamp override for testing.
      */
     public function progressBar(
         int $current,
@@ -234,6 +257,12 @@ final class ConsoleOutput
 
     /**
      * Render one-line text progress with optional timing estimates.
+     *
+     * @param string $label Prefix label shown before the progress metrics.
+     * @param int $current Current completed units.
+     * @param int $total Total units to complete.
+     * @param float|null $startedAt Optional start timestamp from microtime(true).
+     * @param float|null $currentTime Optional current timestamp override for testing.
      */
     public function progressText(
         string $label,
@@ -276,11 +305,17 @@ final class ConsoleOutput
         $this->writeInline($line, complete: $current >= $total);
     }
 
+    /**
+     * Indicate whether output suppression is enabled.
+     */
     public function quiet(): bool
     {
         return $this->quiet;
     }
 
+    /**
+     * Indicate whether ANSI styling is enabled.
+     */
     public function ansi(): bool
     {
         return $this->ansi;
@@ -288,6 +323,9 @@ final class ConsoleOutput
 
     /**
      * Write output to the underlying stream.
+     *
+     * @param bool $newline Append a trailing newline when true.
+     * @param bool $force Write even when quiet mode is enabled.
      */
     public function writeRaw(string $text, bool $newline = true, bool $force = false): void
     {

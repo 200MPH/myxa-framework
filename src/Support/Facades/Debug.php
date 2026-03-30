@@ -26,6 +26,8 @@ final class Debug
     private static $terminator = null;
 
     /**
+     * Override the output stream used by {@see dump()}.
+     *
      * @param resource $stream
      */
     public static function setOutput(mixed $stream): void
@@ -33,22 +35,33 @@ final class Debug
         self::$output = $stream;
     }
 
+    /**
+     * Reset the debug output stream to the default stdout stream.
+     */
     public static function clearOutput(): void
     {
         self::$output = null;
     }
 
+    /**
+     * Override the log file path used by {@see write()}.
+     */
     public static function setLogPath(string $path): void
     {
         self::$logPath = $path;
     }
 
+    /**
+     * Reset the debug log path to the default build location.
+     */
     public static function clearLogPath(): void
     {
         self::$logPath = null;
     }
 
     /**
+     * Override the callback used to terminate execution after {@see dump()}.
+     *
      * @param callable(int): never|void $terminator
      */
     public static function setTerminator(callable $terminator): void
@@ -56,13 +69,16 @@ final class Debug
         self::$terminator = $terminator;
     }
 
+    /**
+     * Reset the dump terminator to the default exit handler.
+     */
     public static function clearTerminator(): void
     {
         self::$terminator = null;
     }
 
     /**
-     * Render debug information and terminate the current program.
+     * Render formatted debug information to the output stream and terminate execution.
      */
     public static function dump(mixed $data = null): never
     {
@@ -78,7 +94,7 @@ final class Debug
     }
 
     /**
-     * Append debug information to the configured debug log file.
+     * Append formatted debug information to the configured debug log file.
      */
     public static function write(mixed $data = null): void
     {
