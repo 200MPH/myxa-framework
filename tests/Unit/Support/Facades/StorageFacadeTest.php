@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Support\Facades;
 
 use Myxa\Application;
+use Myxa\Database\DatabaseManager;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Support\Facades\Storage as StorageFacade;
@@ -55,7 +56,9 @@ final class StorageFacadeTest extends TestCase
         $app->register(new StorageServiceProvider(
             storages: [
                 'local' => new LocalStorage($this->localRoot),
-                'db' => static fn (): DatabaseStorage => new DatabaseStorage(connection: self::CONNECTION_ALIAS),
+                'db' => static fn (): DatabaseStorage => new DatabaseStorage(
+                    manager: new DatabaseManager(self::CONNECTION_ALIAS),
+                ),
             ],
             defaultStorage: 'local',
         ));

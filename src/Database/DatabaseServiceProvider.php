@@ -52,6 +52,9 @@ final class DatabaseServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        DB::setManager($this->app()->make(DatabaseManager::class));
+        $manager = $this->app()->make(DatabaseManager::class);
+
+        DB::setManager($manager);
+        Model::setManager($manager);
     }
 }

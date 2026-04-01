@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Support\Storage;
 
+use Myxa\Database\DatabaseManager;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Support\Storage\Db\DatabaseStorage;
@@ -33,7 +34,7 @@ final class DatabaseStorageTest extends TestCase
 
     public function testDatabaseStoragePersistsUpdatesAndDeletesFiles(): void
     {
-        $storage = new DatabaseStorage(connection: self::CONNECTION_ALIAS);
+        $storage = new DatabaseStorage(manager: $this->makeManager());
 
         $stored = $storage->put(
             'docs/report.txt',
@@ -69,7 +70,7 @@ final class DatabaseStorageTest extends TestCase
 
     public function testDatabaseStorageThrowsWhenReadingMissingFile(): void
     {
-        $storage = new DatabaseStorage(connection: self::CONNECTION_ALIAS);
+        $storage = new DatabaseStorage(manager: $this->makeManager());
 
         $this->expectException(StorageException::class);
         $this->expectExceptionMessage('File "missing.txt" does not exist in "db" storage.');
@@ -116,5 +117,10 @@ final class DatabaseStorageTest extends TestCase
         $pdoProperty->setValue($connection, $pdo);
 
         return $connection;
+    }
+
+    private function makeManager(): DatabaseManager
+    {
+        return new DatabaseManager(self::CONNECTION_ALIAS);
     }
 }

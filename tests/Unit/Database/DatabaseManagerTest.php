@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Myxa\Application;
 use Myxa\Database\DatabaseException;
 use Myxa\Database\DatabaseManager;
+use Myxa\Database\Model;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use Myxa\Database\QueryBuilder;
@@ -31,6 +32,7 @@ final class DatabaseManagerTest extends TestCase
     protected function tearDown(): void
     {
         DB::clearManager();
+        Model::clearManager();
         PdoConnection::unregister(self::CONNECTION_ALIAS, false);
         PdoConnection::unregister('fallback', false);
         PdoConnection::unregister('replaceable', false);

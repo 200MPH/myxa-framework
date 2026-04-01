@@ -7,6 +7,7 @@ namespace Myxa\Support\Storage\Db;
 use InvalidArgumentException;
 use JsonException;
 use Myxa\Database\DatabaseManager;
+use Myxa\Database\QueryBuilder;
 use Myxa\Support\Storage\AbstractStorage;
 use Myxa\Support\Storage\StorageException;
 use Myxa\Support\Storage\StoredFile;
@@ -16,14 +17,12 @@ final class DatabaseStorage extends AbstractStorage
     private ?DatabaseManager $resolvedManager = null;
 
     /**
-     * @param string $connection Database connection alias.
      * @param string $fileTable Metadata table name.
      * @param string $contentTable Content table name.
      * @param DatabaseManager|null $manager Optional prebuilt database manager.
      * @param string $alias Public storage alias.
      */
     public function __construct(
-        private readonly string $connection = 'main',
         private readonly string $fileTable = 'files',
         private readonly string $contentTable = 'file_contents',
         ?DatabaseManager $manager = null,
@@ -65,39 +64,58 @@ final class DatabaseStorage extends AbstractStorage
             $contents,
         ): void {
             if ($existing === null) {
-                $id = $this->manager()->insert(
-                    sprintf(
-                        'INSERT INTO %s (location, filename, mime_type, size, checksum, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                        $this->fileTable,
-                    ),
-                    [$location, $name, $mimeType, $size, $checksum, $encodedMetadata, $timestamp, $timestamp],
-                    $this->connection,
+                $id = $this->insert(
+                    $this->manager()
+                        ->query()
+                        ->insertInto($this->fileTable)
+                        ->values([
+                            'location' => $location,
+                            'filename' => $name,
+                            'mime_type' => $mimeType,
+                            'size' => $size,
+                            'checksum' => $checksum,
+                            'metadata' => $encodedMetadata,
+                            'created_at' => $timestamp,
+                            'updated_at' => $timestamp,
+                        ]),
                 );
 
-                $this->manager()->insert(
-                    sprintf('INSERT INTO %s (file_id, content) VALUES (?, ?)', $this->contentTable),
-                    [$id, $contents],
-                    $this->connection,
+                $this->insert(
+                    $this->manager()
+                        ->query()
+                        ->insertInto($this->contentTable)
+                        ->values([
+                            'file_id' => $id,
+                            'content' => $contents,
+                        ]),
                 );
 
                 return;
             }
 
-            $this->manager()->update(
-                sprintf(
-                    'UPDATE %s SET filename = ?, mime_type = ?, size = ?, checksum = ?, metadata = ?, updated_at = ? WHERE id = ?',
-                    $this->fileTable,
-                ),
-                [$name, $mimeType, $size, $checksum, $encodedMetadata, $timestamp, (int) $existing['id']],
-                $this->connection,
+            $this->update(
+                $this->manager()
+                    ->query()
+                    ->update($this->fileTable)
+                    ->setMany([
+                        'filename' => $name,
+                        'mime_type' => $mimeType,
+                        'size' => $size,
+                        'checksum' => $checksum,
+                        'metadata' => $encodedMetadata,
+                        'updated_at' => $timestamp,
+                    ])
+                    ->where('id', '=', (int) $existing['id']),
             );
 
-            $this->manager()->update(
-                sprintf('UPDATE %s SET content = ? WHERE file_id = ?', $this->contentTable),
-                [$contents, (int) $existing['id']],
-                $this->connection,
+            $this->update(
+                $this->manager()
+                    ->query()
+                    ->update($this->contentTable)
+                    ->set('content', $contents)
+                    ->where('file_id', '=', (int) $existing['id']),
             );
-        }, $this->connection);
+        });
 
         return $this->get($location) ?? throw new StorageException(sprintf('Unable to persist file "%s".', $location));
     }
@@ -123,21 +141,19 @@ final class DatabaseStorage extends AbstractStorage
     public function read(string $location): string
     {
         $location = $this->normalizeLocation($location);
-        $rows = $this->manager()->select(
-            sprintf(
-                'SELECT c.content FROM %s c INNER JOIN %s f ON f.id = c.file_id WHERE f.location = ? LIMIT 1',
-                $this->contentTable,
-                $this->fileTable,
-            ),
-            [$location],
-            $this->connection,
-        );
+        $row = $this->rowFor($location);
 
-        if ($rows === []) {
+        if ($row === null) {
             throw new StorageException(sprintf('File "%s" does not exist in "%s" storage.', $location, $this->alias()));
         }
 
-        return (string) $rows[0]['content'];
+        $content = $this->contentFor((int) $row['id']);
+
+        if ($content === null) {
+            throw new StorageException(sprintf('File "%s" does not exist in "%s" storage.', $location, $this->alias()));
+        }
+
+        return $content;
     }
 
     /**
@@ -155,18 +171,20 @@ final class DatabaseStorage extends AbstractStorage
         $this->manager()->transaction(function () use ($row): void {
             $id = (int) $row['id'];
 
-            $this->manager()->delete(
-                sprintf('DELETE FROM %s WHERE file_id = ?', $this->contentTable),
-                [$id],
-                $this->connection,
+            $this->deleteQuery(
+                $this->manager()
+                    ->query()
+                    ->deleteFrom($this->contentTable)
+                    ->where('file_id', '=', $id),
             );
 
-            $this->manager()->delete(
-                sprintf('DELETE FROM %s WHERE id = ?', $this->fileTable),
-                [$id],
-                $this->connection,
+            $this->deleteQuery(
+                $this->manager()
+                    ->query()
+                    ->deleteFrom($this->fileTable)
+                    ->where('id', '=', $id),
             );
-        }, $this->connection);
+        });
 
         return true;
     }
@@ -184,16 +202,59 @@ final class DatabaseStorage extends AbstractStorage
      */
     private function rowFor(string $location): ?array
     {
-        $rows = $this->manager()->select(
-            sprintf(
-                'SELECT id, location, filename, mime_type, size, checksum, metadata, created_at, updated_at FROM %s WHERE location = ? LIMIT 1',
-                $this->fileTable,
-            ),
-            [$location],
-            $this->connection,
+        $rows = $this->select(
+            $this->manager()
+                ->query()
+                ->select(
+                    'id',
+                    'location',
+                    'filename',
+                    'mime_type',
+                    'size',
+                    'checksum',
+                    'metadata',
+                    'created_at',
+                    'updated_at',
+                )
+                ->from($this->fileTable)
+                ->where('location', '=', $location)
+                ->limit(1),
         );
 
         return $rows[0] ?? null;
+    }
+
+    private function contentFor(int $fileId): ?string
+    {
+        $rows = $this->select(
+            $this->manager()
+                ->query()
+                ->select('content')
+                ->from($this->contentTable)
+                ->where('file_id', '=', $fileId)
+                ->limit(1),
+        );
+
+        if (!array_key_exists(0, $rows) || !array_key_exists('content', $rows[0])) {
+            return null;
+        }
+
+        return (string) $rows[0]['content'];
+    }
+
+    private function insert(QueryBuilder $query): string|int
+    {
+        return $this->manager()->insert($query->toSql(), $query->getBindings());
+    }
+
+    private function update(QueryBuilder $query): int
+    {
+        return $this->manager()->update($query->toSql(), $query->getBindings());
+    }
+
+    private function deleteQuery(QueryBuilder $query): int
+    {
+        return $this->manager()->delete($query->toSql(), $query->getBindings());
     }
 
     /**
@@ -249,7 +310,18 @@ final class DatabaseStorage extends AbstractStorage
 
     private function manager(): DatabaseManager
     {
-        return $this->resolvedManager ??= new DatabaseManager($this->connection);
+        return $this->resolvedManager ??= new DatabaseManager();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function select(QueryBuilder $query): array
+    {
+        return $this->manager()->select(
+            $query->toSql(),
+            $query->getBindings(),
+        );
     }
 
     private function assertIdentifier(string $identifier): void

@@ -1,0 +1,409 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Test\Unit\Database;
+
+use Myxa\Database\DatabaseManager;
+use Myxa\Database\HasBlameable;
+use Myxa\Database\HasTimestamps;
+use Myxa\Database\Model;
+use Myxa\Database\ModelNotFoundException;
+use Myxa\Database\ModelQuery;
+use Myxa\Database\PdoConnection;
+use Myxa\Database\PdoConnectionConfig;
+use PDO;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
+
+final class User extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    public function profile(): ModelQuery
+    {
+        return $this->hasOne(Profile::class);
+    }
+
+    public function posts(): ModelQuery
+    {
+        return $this->hasMany(Post::class);
+    }
+}
+
+final class RemoteUser extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'users';
+
+    protected ?string $connection = 'model-remote';
+
+    protected string $email = '';
+
+    protected string $status = '';
+}
+
+final class Profile extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'profiles';
+
+    protected ?int $user_id = null;
+
+    protected string $bio = '';
+
+    public function user(): ModelQuery
+    {
+        return $this->belongsTo(User::class);
+    }
+}
+
+final class Post extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'posts';
+
+    protected ?int $user_id = null;
+
+    protected string $title = '';
+
+    public function user(): ModelQuery
+    {
+        return $this->belongsTo(User::class);
+    }
+}
+
+final class ExternalUser extends Model
+{
+    protected string $table = 'external_users';
+
+    protected string $primaryKey = 'uuid';
+
+    protected ?string $uuid = null;
+
+    protected string $email = '';
+}
+
+final class AuditedUser extends Model
+{
+    use HasTimestamps;
+    use HasBlameable;
+
+    protected string $table = 'audited_users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+}
+
+#[CoversClass(Model::class)]
+#[CoversClass(ModelQuery::class)]
+#[CoversClass(ModelNotFoundException::class)]
+final class ModelTest extends TestCase
+{
+    private const string CONNECTION_ALIAS = 'model-test';
+
+    private const string REMOTE_CONNECTION_ALIAS = 'model-remote';
+
+    protected function setUp(): void
+    {
+        PdoConnection::register(self::CONNECTION_ALIAS, $this->makeInMemoryConnection(), true);
+        PdoConnection::register(self::REMOTE_CONNECTION_ALIAS, $this->makeInMemoryConnection(), true);
+        Model::setManager($this->makeManager());
+    }
+
+    protected function tearDown(): void
+    {
+        AuditedUser::clearBlameResolver();
+        Model::clearManager();
+        PdoConnection::unregister(self::CONNECTION_ALIAS);
+        PdoConnection::unregister(self::REMOTE_CONNECTION_ALIAS);
+    }
+
+    public function testFindAndQueryHydrateModels(): void
+    {
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            ['john@example.com', 'active', '2026-04-01T10:00:00+00:00', '2026-04-01T10:00:00+00:00'],
+        );
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            ['jane@example.com', 'active', '2026-04-01T10:05:00+00:00', '2026-04-01T10:05:00+00:00'],
+        );
+
+        $user = User::find(1);
+
+        self::assertInstanceOf(User::class, $user);
+        self::assertTrue($user->exists());
+        self::assertSame(1, (int) $user->getKey());
+        self::assertSame('john@example.com', $user->email);
+        self::assertSame(1, (int) $user->toArray()['id']);
+        self::assertSame('john@example.com', $user->toArray()['email']);
+        self::assertSame('active', $user->toArray()['status']);
+
+        $users = User::query()
+            ->where('status', '=', 'active')
+            ->orderBy('id', 'DESC')
+            ->limit(1)
+            ->get();
+
+        self::assertCount(1, $users);
+        self::assertSame('jane@example.com', $users[0]->email);
+    }
+
+    public function testCreateAndSavePersistModels(): void
+    {
+        $user = User::create(['email' => 'new@example.com', 'status' => 'pending']);
+
+        self::assertTrue($user->exists());
+        self::assertNotNull($user->getKey());
+        self::assertNotNull($user->created_at);
+        self::assertNotNull($user->updated_at);
+        self::assertArrayNotHasKey('createdAtColumn', $user->toArray());
+        self::assertArrayNotHasKey('updatedAtColumn', $user->toArray());
+
+        $user->status = 'active';
+
+        self::assertTrue($user->save());
+        self::assertSame(
+            'active',
+            $this->makeManager()->select('SELECT status FROM users WHERE id = ?', [$user->getKey()])[0]['status'],
+        );
+    }
+
+    public function testRefreshReloadsPersistedState(): void
+    {
+        $user = User::create(['email' => 'refresh@example.com', 'status' => 'draft']);
+
+        $this->makeManager()->update(
+            'UPDATE users SET status = ? WHERE id = ?',
+            ['archived', $user->getKey()],
+        );
+
+        $user->refresh();
+
+        self::assertSame('archived', $user->status);
+    }
+
+    public function testDeleteRemovesPersistedModel(): void
+    {
+        $user = User::create(['email' => 'delete@example.com', 'status' => 'inactive']);
+
+        self::assertTrue($user->delete());
+        self::assertFalse($user->exists());
+        self::assertNull($user->getKey());
+        self::assertSame(
+            0,
+            (int) $this->makeManager()->select('SELECT COUNT(*) AS total FROM users')[0]['total'],
+        );
+    }
+
+    public function testReadOnlyModelsCannotBeSavedOrDeleted(): void
+    {
+        $newUser = (new User(['email' => 'readonly@example.com', 'status' => 'draft']))->setReadOnly();
+
+        self::assertFalse($newUser->save());
+
+        $persisted = User::create(['email' => 'persisted@example.com', 'status' => 'active']);
+        $persisted->setReadOnly();
+
+        self::assertFalse($persisted->delete());
+    }
+
+    public function testCloningProducesANewUnsavedModel(): void
+    {
+        $user = User::create(['email' => 'clone@example.com', 'status' => 'active']);
+
+        $copy = clone $user;
+        $copy->email = 'clone-copy@example.com';
+
+        self::assertNull($copy->getKey());
+        self::assertFalse($copy->exists());
+        self::assertTrue($copy->save());
+        self::assertNotSame($user->getKey(), $copy->getKey());
+    }
+
+    public function testRelationsResolveHasOneHasManyAndBelongsTo(): void
+    {
+        $user = User::create(['email' => 'relations@example.com', 'status' => 'active']);
+        Profile::create(['user_id' => $user->getKey(), 'bio' => 'About user']);
+        Post::create(['user_id' => $user->getKey(), 'title' => 'First']);
+        Post::create(['user_id' => $user->getKey(), 'title' => 'Second']);
+
+        $profile = $user->profile()->firstOrFail();
+        $posts = $user->posts()->orderBy('title')->get();
+
+        self::assertInstanceOf(Profile::class, $profile);
+        self::assertSame('About user', $profile->bio);
+        self::assertCount(2, $posts);
+        self::assertSame('First', $posts[0]->title);
+        self::assertSame('relations@example.com', $profile->user()->firstOrFail()->email);
+        self::assertSame('relations@example.com', $posts[0]->user()->firstOrFail()->email);
+    }
+
+    public function testCustomPrimaryKeyConstantsSupportManualIdentifiers(): void
+    {
+        $user = ExternalUser::create([
+            'uuid' => 'ext_123',
+            'email' => 'external@example.com',
+        ]);
+
+        self::assertSame('ext_123', $user->getKey());
+        self::assertNull($user->toArray()['created_at'] ?? null);
+        self::assertSame(
+            'external@example.com',
+            ExternalUser::findOrFail('ext_123')->email,
+        );
+    }
+
+    public function testBlameableTraitTracksCreatorAndUpdater(): void
+    {
+        AuditedUser::setBlameResolver(static fn (Model $model): int => 7);
+
+        $user = AuditedUser::create(['email' => 'audit@example.com', 'status' => 'draft']);
+
+        self::assertSame(7, $user->created_by);
+        self::assertSame(7, $user->updated_by);
+        self::assertArrayNotHasKey('createdByColumn', $user->toArray());
+        self::assertArrayNotHasKey('updatedByColumn', $user->toArray());
+
+        AuditedUser::setBlameResolver(static fn (Model $model): int => 9);
+        $user->status = 'published';
+
+        self::assertTrue($user->save());
+        self::assertSame(7, $user->created_by);
+        self::assertSame(9, $user->updated_by);
+        self::assertSame(
+            [
+                'created_by' => 7,
+                'updated_by' => 9,
+            ],
+            $this->makeManager()->select(
+                'SELECT created_by, updated_by FROM audited_users WHERE id = ?',
+                [$user->getKey()],
+            )[0],
+        );
+    }
+
+    public function testFindOrFailThrowsModelNotFoundException(): void
+    {
+        $this->expectException(ModelNotFoundException::class);
+        $this->expectExceptionMessage(sprintf('No record was found for model %s with key "missing".', ExternalUser::class));
+
+        ExternalUser::findOrFail('missing');
+    }
+
+    public function testModelsCanUseDifferentConnectionAliases(): void
+    {
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            ['local@example.com', 'active', '2026-04-01T10:00:00+00:00', '2026-04-01T10:00:00+00:00'],
+        );
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            ['remote@example.com', 'active', '2026-04-01T10:10:00+00:00', '2026-04-01T10:10:00+00:00'],
+            self::REMOTE_CONNECTION_ALIAS,
+        );
+
+        $local = User::findOrFail(1);
+        $remote = RemoteUser::findOrFail(1);
+
+        self::assertSame('local@example.com', $local->email);
+        self::assertSame('remote@example.com', $remote->email);
+
+        $remote->status = 'archived';
+        self::assertTrue($remote->save());
+
+        self::assertSame(
+            'active',
+            $this->makeManager()->select('SELECT status FROM users WHERE id = ?', [1])[0]['status'],
+        );
+        self::assertSame(
+            'archived',
+            $this->makeManager()->select(
+                'SELECT status FROM users WHERE id = ?',
+                [1],
+                self::REMOTE_CONNECTION_ALIAS,
+            )[0]['status'],
+        );
+    }
+
+    private function makeManager(): DatabaseManager
+    {
+        return new DatabaseManager(self::CONNECTION_ALIAS);
+    }
+
+    private function makeInMemoryConnection(): PdoConnection
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->exec(
+            'CREATE TABLE users ('
+            . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            . 'email TEXT NOT NULL, '
+            . 'status TEXT NOT NULL, '
+            . 'created_at TEXT NULL, '
+            . 'updated_at TEXT NULL'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE profiles ('
+            . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            . 'user_id INTEGER NOT NULL, '
+            . 'bio TEXT NOT NULL, '
+            . 'created_at TEXT NULL, '
+            . 'updated_at TEXT NULL'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE posts ('
+            . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            . 'user_id INTEGER NOT NULL, '
+            . 'title TEXT NOT NULL, '
+            . 'created_at TEXT NULL, '
+            . 'updated_at TEXT NULL'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE external_users ('
+            . 'uuid TEXT PRIMARY KEY, '
+            . 'email TEXT NOT NULL'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE audited_users ('
+            . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            . 'email TEXT NOT NULL, '
+            . 'status TEXT NOT NULL, '
+            . 'created_at TEXT NULL, '
+            . 'updated_at TEXT NULL, '
+            . 'created_by INTEGER NULL, '
+            . 'updated_by INTEGER NULL'
+            . ')',
+        );
+
+        $connection = new PdoConnection(
+            new PdoConnectionConfig(
+                engine: 'mysql',
+                database: 'placeholder',
+                host: '127.0.0.1',
+            ),
+        );
+
+        $pdoProperty = new ReflectionProperty(PdoConnection::class, 'pdo');
+        $pdoProperty->setValue($connection, $pdo);
+
+        return $connection;
+    }
+}
