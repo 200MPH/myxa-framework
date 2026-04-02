@@ -20,6 +20,7 @@ abstract class Model implements JsonSerializable
 {
     private const array INTERNAL_PROPERTIES = [
         'attributes',
+        'extras',
         'resolvedManager',
         'exists',
         'readOnly',
@@ -47,6 +48,9 @@ abstract class Model implements JsonSerializable
 
     /** @var array<string, mixed> */
     private array $attributes = [];
+
+    /** @var array<string, mixed> */
+    private array $extras = [];
 
     private ?DatabaseManager $resolvedManager = null;
 
@@ -187,7 +191,27 @@ abstract class Model implements JsonSerializable
      */
     public function fill(array $attributes): static
     {
-        return $this->fillAttributes($attributes, true);
+        foreach ($attributes as $key => $value) {
+            if (!is_string($key) || trim($key) === '') {
+                throw new InvalidArgumentException('Model attribute keys must be non-empty strings.');
+            }
+
+            if (!$this->hasDeclaredProperty($key)) {
+                throw new InvalidArgumentException(sprintf(
+                    'Cannot mass-assign unknown attribute "%s" on model %s.',
+                    $key,
+                    static::class,
+                ));
+            }
+
+            if ($this->isGuardedProperty($key)) {
+                continue;
+            }
+
+            $this->writeDeclaredProperty($key, $value);
+        }
+
+        return $this;
     }
 
     /**
@@ -195,24 +219,12 @@ abstract class Model implements JsonSerializable
      */
     private function forceFill(array $attributes): static
     {
-        return $this->fillAttributes($attributes, false);
-    }
-
-    /**
-     * @param array<string, mixed> $attributes
-     */
-    private function fillAttributes(array $attributes, bool $respectGuarded): static
-    {
         foreach ($attributes as $key => $value) {
             if (!is_string($key) || trim($key) === '') {
                 throw new InvalidArgumentException('Model attribute keys must be non-empty strings.');
             }
 
-            if ($respectGuarded && $this->isGuardedProperty($key)) {
-                continue;
-            }
-
-            $this->setAttribute($key, $value);
+            $this->writeAttributeValue($key, $value);
         }
 
         return $this;
@@ -229,15 +241,41 @@ abstract class Model implements JsonSerializable
 
     public function setAttribute(string $key, mixed $value): static
     {
-        if ($this->hasDeclaredProperty($key)) {
-            $this->writeDeclaredProperty($key, $value);
-
-            return $this;
+        if (!$this->canWriteAttribute($key)) {
+            throw new InvalidArgumentException(sprintf(
+                'Cannot set unknown attribute "%s" on model %s. Use extra() for ad-hoc helper data.',
+                $key,
+                static::class,
+            ));
         }
 
-        $this->attributes[$key] = $value;
+        $this->writeAttributeValue($key, $value);
 
         return $this;
+    }
+
+    public function extra(string $key, mixed $value): static
+    {
+        if (trim($key) === '') {
+            throw new InvalidArgumentException('Extra keys must be non-empty strings.');
+        }
+
+        $this->extras[$key] = $value;
+
+        return $this;
+    }
+
+    public function getExtra(string $key, mixed $default = null): mixed
+    {
+        return $this->extras[$key] ?? $default;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function extras(): array
+    {
+        return $this->extras;
     }
 
     public function __get(string $name): mixed
@@ -263,7 +301,13 @@ abstract class Model implements JsonSerializable
             return;
         }
 
-        unset($this->attributes[$name]);
+        if (array_key_exists($name, $this->attributes)) {
+            unset($this->attributes[$name]);
+
+            return;
+        }
+
+        unset($this->extras[$name]);
     }
 
     /**
@@ -588,6 +632,13 @@ abstract class Model implements JsonSerializable
         return array_key_exists($name, $this->declaredProperties());
     }
 
+    private function canWriteAttribute(string $name): bool
+    {
+        return $this->hasDeclaredProperty($name)
+            || $name === static::primaryKey()
+            || array_key_exists($name, $this->attributes);
+    }
+
     private function isGuardedProperty(string $name): bool
     {
         return isset($this->guardedProperties()[$name]);
@@ -605,6 +656,17 @@ abstract class Model implements JsonSerializable
     private function writeDeclaredProperty(string $name, mixed $value): void
     {
         $this->declaredProperties()[$name]->setValue($this, $value);
+    }
+
+    private function writeAttributeValue(string $name, mixed $value): void
+    {
+        if ($this->hasDeclaredProperty($name)) {
+            $this->writeDeclaredProperty($name, $value);
+
+            return;
+        }
+
+        $this->attributes[$name] = $value;
     }
 
     /**

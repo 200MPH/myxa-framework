@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Database;
 
+use InvalidArgumentException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
@@ -220,6 +221,22 @@ final class ModelTest extends TestCase
         self::assertNull($user->password_hash);
     }
 
+    public function testFillRejectsUnknownAttributes(): void
+    {
+        $user = new User([
+            'email' => 'safe@example.com',
+            'status' => 'active',
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot mass-assign unknown attribute "nickname" on model %s.',
+            User::class,
+        ));
+
+        $user->fill(['nickname' => 'Bird']);
+    }
+
     public function testHiddenAttributesAreOmittedFromArrayOutput(): void
     {
         $user = new SecureUser([
@@ -255,6 +272,41 @@ final class ModelTest extends TestCase
         self::assertArrayNotHasKey('password_hash', $user->toArray());
     }
 
+    public function testSettingUnknownAttributesRequiresExtras(): void
+    {
+        $user = new User([
+            'email' => 'strict@example.com',
+            'status' => 'active',
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot set unknown attribute "nickname" on model %s. Use extra() for ad-hoc helper data.',
+            User::class,
+        ));
+
+        $user->setAttribute('nickname', 'Bird');
+    }
+
+    public function testExtrasStoreAdHocHelperDataOutsideModelAttributes(): void
+    {
+        $user = new User([
+            'email' => 'helper@example.com',
+            'status' => 'active',
+        ]);
+
+        $user->extra('nickname', 'Bird');
+        $user->extra('is_online', true);
+
+        self::assertSame('Bird', $user->getExtra('nickname'));
+        self::assertTrue($user->getExtra('is_online'));
+        self::assertSame(
+            ['nickname' => 'Bird', 'is_online' => true],
+            $user->extras(),
+        );
+        self::assertArrayNotHasKey('nickname', $user->toArray());
+    }
+
     public function testHydrationBypassesGuardedFillForPersistedAttributes(): void
     {
         $this->makeManager()->insert(
@@ -286,10 +338,9 @@ final class ModelTest extends TestCase
     public function testToJsonThrowsWhenEncodingFails(): void
     {
         $user = new User([
-            'email' => 'json-failure@example.com',
+            'email' => "\xB1\x31",
             'status' => 'active',
         ]);
-        $user->setAttribute('invalid', "\xB1\x31");
 
         $this->expectException(JsonException::class);
 
