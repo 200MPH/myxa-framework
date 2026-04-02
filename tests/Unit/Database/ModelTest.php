@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Test\Unit\Database;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
 use Myxa\Database\DatabaseManager;
+use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
 use Myxa\Database\HasBlameable;
@@ -68,6 +70,21 @@ final class SecureUser extends Model
     #[Guarded]
     #[Hidden]
     protected ?string $password_hash = null;
+}
+
+final class CastedUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Cast('datetime_immutable', format: DATE_ATOM)]
+    protected ?DateTimeImmutable $created_at = null;
+
+    #[Cast('datetime_immutable', format: DATE_ATOM)]
+    protected ?DateTimeImmutable $updated_at = null;
 }
 
 final class Profile extends Model
@@ -319,6 +336,67 @@ final class ModelTest extends TestCase
         self::assertSame('hydrated@example.com', $user->email);
         self::assertSame('stored-hash', $user->password_hash);
         self::assertArrayNotHasKey('password_hash', $user->toArray());
+    }
+
+    public function testCastedDateTimePropertiesHydrateToObjectsAndSerializeBackToStrings(): void
+    {
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, created_at, updated_at) VALUES (?, ?, ?, ?)',
+            ['casted@example.com', 'active', '2026-04-01T10:00:00+00:00', '2026-04-01T10:05:00+00:00'],
+        );
+
+        $user = CastedUser::findOrFail(1);
+
+        self::assertInstanceOf(DateTimeImmutable::class, $user->created_at);
+        self::assertInstanceOf(DateTimeImmutable::class, $user->updated_at);
+        self::assertSame('2026-04-01T10:00:00+00:00', $user->created_at?->format(DATE_ATOM));
+        $attributes = $user->toArray();
+
+        self::assertSame('casted@example.com', $attributes['email']);
+        self::assertSame('active', $attributes['status']);
+        self::assertSame('2026-04-01T10:00:00+00:00', $attributes['created_at']);
+        self::assertSame('2026-04-01T10:05:00+00:00', $attributes['updated_at']);
+        self::assertSame(1, $attributes['id']);
+        self::assertArrayNotHasKey('password_hash', $attributes);
+    }
+
+    public function testCastedDateTimePropertiesPersistUsingDeclaredFormat(): void
+    {
+        $user = new CastedUser([
+            'email' => 'persist-cast@example.com',
+            'status' => 'active',
+            'created_at' => '2026-04-01T11:00:00+00:00',
+            'updated_at' => '2026-04-01T11:05:00+00:00',
+        ]);
+
+        self::assertInstanceOf(DateTimeImmutable::class, $user->created_at);
+        self::assertTrue($user->save());
+        self::assertSame(
+            [
+                'created_at' => '2026-04-01T11:00:00+00:00',
+                'updated_at' => '2026-04-01T11:05:00+00:00',
+            ],
+            $this->makeManager()->select(
+                'SELECT created_at, updated_at FROM users WHERE id = ?',
+                [$user->getKey()],
+            )[0],
+        );
+    }
+
+    public function testInvalidDateTimeCastInputThrowsHelpfulException(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot cast value "not-a-date" for property "created_at" on model %s to %s.',
+            CastedUser::class,
+            DateTimeImmutable::class,
+        ));
+
+        new CastedUser([
+            'email' => 'broken@example.com',
+            'status' => 'active',
+            'created_at' => 'not-a-date',
+        ]);
     }
 
     public function testToJsonEncodesSerializedAttributes(): void
