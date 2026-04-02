@@ -6,7 +6,10 @@ namespace Myxa\Database;
 
 use InvalidArgumentException;
 use JsonSerializable;
+use JsonException;
 use LogicException;
+use Myxa\Database\Attributes\Guarded;
+use Myxa\Database\Attributes\Hidden;
 use ReflectionObject;
 use ReflectionProperty;
 
@@ -27,6 +30,12 @@ abstract class Model implements JsonSerializable
 
     /** @var array<class-string, array<string, ReflectionProperty>> */
     private static array $declaredPropertyCache = [];
+
+    /** @var array<class-string, array<string, true>> */
+    private static array $guardedPropertyCache = [];
+
+    /** @var array<class-string, array<string, true>> */
+    private static array $hiddenPropertyCache = [];
 
     private static ?DatabaseManager $sharedManager = null;
 
@@ -145,7 +154,7 @@ abstract class Model implements JsonSerializable
     public static function hydrate(array $attributes, ?DatabaseManager $manager = null): static
     {
         $model = new static([], $manager ?? static::sharedManager());
-        $model->fill($attributes);
+        $model->forceFill($attributes);
         $model->exists = true;
 
         return $model;
@@ -178,9 +187,29 @@ abstract class Model implements JsonSerializable
      */
     public function fill(array $attributes): static
     {
+        return $this->fillAttributes($attributes, true);
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    private function forceFill(array $attributes): static
+    {
+        return $this->fillAttributes($attributes, false);
+    }
+
+    /**
+     * @param array<string, mixed> $attributes
+     */
+    private function fillAttributes(array $attributes, bool $respectGuarded): static
+    {
         foreach ($attributes as $key => $value) {
             if (!is_string($key) || trim($key) === '') {
                 throw new InvalidArgumentException('Model attribute keys must be non-empty strings.');
+            }
+
+            if ($respectGuarded && $this->isGuardedProperty($key)) {
+                continue;
             }
 
             $this->setAttribute($key, $value);
@@ -242,7 +271,13 @@ abstract class Model implements JsonSerializable
      */
     public function toArray(): array
     {
-        return array_merge($this->declaredAttributes(), $this->attributes);
+        $attributes = $this->allAttributes();
+
+        foreach (array_keys($this->hiddenProperties()) as $key) {
+            unset($attributes[$key]);
+        }
+
+        return $attributes;
     }
 
     /**
@@ -251,6 +286,16 @@ abstract class Model implements JsonSerializable
     public function jsonSerialize(): array
     {
         return $this->toArray();
+    }
+
+    /**
+     * Encode the model into a JSON string.
+     *
+     * @throws JsonException
+     */
+    public function toJson(int $flags = 0): string
+    {
+        return json_encode($this->jsonSerialize(), JSON_THROW_ON_ERROR | $flags);
     }
 
     public function refresh(): static
@@ -442,7 +487,7 @@ abstract class Model implements JsonSerializable
      */
     private function attributesForInsert(): array
     {
-        return $this->filterPersistableAttributes($this->toArray());
+        return $this->filterPersistableAttributes($this->allAttributes());
     }
 
     /**
@@ -450,10 +495,18 @@ abstract class Model implements JsonSerializable
      */
     private function attributesForUpdate(): array
     {
-        $attributes = $this->toArray();
+        $attributes = $this->allAttributes();
         unset($attributes[static::primaryKey()]);
 
         return $this->filterPersistableAttributes($attributes);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function allAttributes(): array
+    {
+        return array_merge($this->declaredAttributes(), $this->attributes);
     }
 
     /**
@@ -535,6 +588,11 @@ abstract class Model implements JsonSerializable
         return array_key_exists($name, $this->declaredProperties());
     }
 
+    private function isGuardedProperty(string $name): bool
+    {
+        return isset($this->guardedProperties()[$name]);
+    }
+
     private function readDeclaredProperty(string $name): mixed
     {
         $property = $this->declaredProperties()[$name];
@@ -558,6 +616,22 @@ abstract class Model implements JsonSerializable
     }
 
     /**
+     * @return array<string, true>
+     */
+    private function guardedProperties(): array
+    {
+        return self::$guardedPropertyCache[static::class] ??= $this->buildAttributedPropertyCache(Guarded::class);
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function hiddenProperties(): array
+    {
+        return self::$hiddenPropertyCache[static::class] ??= $this->buildAttributedPropertyCache(Hidden::class);
+    }
+
+    /**
      * @return array<string, ReflectionProperty>
      */
     private function buildDeclaredPropertyCache(): array
@@ -574,6 +648,25 @@ abstract class Model implements JsonSerializable
 
             $seen[$name] = true;
             $properties[$name] = $property;
+        }
+
+        return $properties;
+    }
+
+    /**
+     * @param class-string $attributeClass
+     * @return array<string, true>
+     */
+    private function buildAttributedPropertyCache(string $attributeClass): array
+    {
+        $properties = [];
+
+        foreach ($this->declaredProperties() as $name => $property) {
+            if ($property->getAttributes($attributeClass) === []) {
+                continue;
+            }
+
+            $properties[$name] = true;
         }
 
         return $properties;

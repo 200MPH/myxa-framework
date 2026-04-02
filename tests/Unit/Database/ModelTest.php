@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use Myxa\Database\DatabaseManager;
+use Myxa\Database\Attributes\Guarded;
+use Myxa\Database\Attributes\Hidden;
 use Myxa\Database\HasBlameable;
 use Myxa\Database\HasTimestamps;
 use Myxa\Database\Model;
@@ -13,6 +15,7 @@ use Myxa\Database\ModelQuery;
 use Myxa\Database\PdoConnection;
 use Myxa\Database\PdoConnectionConfig;
 use PDO;
+use JsonException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -49,6 +52,21 @@ final class RemoteUser extends Model
     protected string $email = '';
 
     protected string $status = '';
+}
+
+final class SecureUser extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Guarded]
+    #[Hidden]
+    protected ?string $password_hash = null;
 }
 
 final class Profile extends Model
@@ -179,6 +197,103 @@ final class ModelTest extends TestCase
             'active',
             $this->makeManager()->select('SELECT status FROM users WHERE id = ?', [$user->getKey()])[0]['status'],
         );
+    }
+
+    public function testFillSkipsGuardedAttributes(): void
+    {
+        $user = new SecureUser([
+            'email' => 'safe@example.com',
+            'status' => 'active',
+            'password_hash' => 'incoming-hash',
+        ]);
+
+        self::assertSame('safe@example.com', $user->email);
+        self::assertSame('active', $user->status);
+        self::assertNull($user->password_hash);
+
+        $user->fill([
+            'status' => 'archived',
+            'password_hash' => 'updated-hash',
+        ]);
+
+        self::assertSame('archived', $user->status);
+        self::assertNull($user->password_hash);
+    }
+
+    public function testHiddenAttributesAreOmittedFromArrayOutput(): void
+    {
+        $user = new SecureUser([
+            'email' => 'hidden@example.com',
+            'status' => 'active',
+        ]);
+        $user->password_hash = 'stored-hash';
+
+        $attributes = $user->toArray();
+
+        self::assertArrayNotHasKey('password_hash', $attributes);
+        self::assertArrayNotHasKey('id', $attributes);
+        self::assertSame('hidden@example.com', $attributes['email']);
+        self::assertSame('active', $attributes['status']);
+        self::assertNull($attributes['created_at']);
+        self::assertNull($attributes['updated_at']);
+    }
+
+    public function testTrustedCodeCanSetGuardedAttributesDirectlyAndPersistThem(): void
+    {
+        $user = new SecureUser([
+            'email' => 'persist-hidden@example.com',
+            'status' => 'active',
+        ]);
+
+        $user->password_hash = 'trusted-hash';
+
+        self::assertTrue($user->save());
+        self::assertSame(
+            'trusted-hash',
+            $this->makeManager()->select('SELECT password_hash FROM users WHERE id = ?', [$user->getKey()])[0]['password_hash'],
+        );
+        self::assertArrayNotHasKey('password_hash', $user->toArray());
+    }
+
+    public function testHydrationBypassesGuardedFillForPersistedAttributes(): void
+    {
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+            ['hydrated@example.com', 'active', 'stored-hash', '2026-04-01T10:00:00+00:00', '2026-04-01T10:00:00+00:00'],
+        );
+
+        $user = SecureUser::findOrFail(1);
+
+        self::assertSame('hydrated@example.com', $user->email);
+        self::assertSame('stored-hash', $user->password_hash);
+        self::assertArrayNotHasKey('password_hash', $user->toArray());
+    }
+
+    public function testToJsonEncodesSerializedAttributes(): void
+    {
+        $user = new SecureUser([
+            'email' => 'json@example.com',
+            'status' => 'active',
+        ]);
+        $user->password_hash = 'stored-hash';
+
+        self::assertSame(
+            '{"email":"json@example.com","status":"active","created_at":null,"updated_at":null}',
+            $user->toJson(),
+        );
+    }
+
+    public function testToJsonThrowsWhenEncodingFails(): void
+    {
+        $user = new User([
+            'email' => 'json-failure@example.com',
+            'status' => 'active',
+        ]);
+        $user->setAttribute('invalid', "\xB1\x31");
+
+        $this->expectException(JsonException::class);
+
+        $user->toJson();
     }
 
     public function testRefreshReloadsPersistedState(): void
@@ -353,6 +468,7 @@ final class ModelTest extends TestCase
             . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             . 'email TEXT NOT NULL, '
             . 'status TEXT NOT NULL, '
+            . 'password_hash TEXT NULL, '
             . 'created_at TEXT NULL, '
             . 'updated_at TEXT NULL'
             . ')',
