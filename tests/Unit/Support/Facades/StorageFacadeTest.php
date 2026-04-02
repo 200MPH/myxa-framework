@@ -6,8 +6,8 @@ namespace Test\Unit\Support\Facades;
 
 use Myxa\Application;
 use Myxa\Database\DatabaseManager;
-use Myxa\Database\PdoConnection;
-use Myxa\Database\PdoConnectionConfig;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Support\Facades\Storage as StorageFacade;
 use Myxa\Support\Storage\Db\DatabaseStorage;
 use Myxa\Support\Storage\Local\LocalStorage;

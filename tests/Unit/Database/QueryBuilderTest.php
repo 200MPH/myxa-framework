@@ -6,7 +6,7 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use LogicException;
-use Myxa\Database\QueryBuilder;
+use Myxa\Database\Query\QueryBuilder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 

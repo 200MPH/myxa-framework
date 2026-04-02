@@ -6,9 +6,9 @@ namespace Myxa\Support\Facades;
 
 use Myxa\Database\DatabaseException;
 use Myxa\Database\DatabaseManager;
-use Myxa\Database\PdoConnection;
-use Myxa\Database\QueryBuilder;
-use Myxa\Database\RawExpression;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Query\QueryBuilder;
+use Myxa\Database\Query\RawExpression;
 use PDO;
 use SensitiveParameter;
 

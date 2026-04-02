@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Database\Attributes;
 
 use Attribute;
-use Myxa\Database\CastType;
+use Myxa\Database\Model\CastType;
 
 #[Attribute(Attribute::TARGET_PROPERTY)]
 final class Cast

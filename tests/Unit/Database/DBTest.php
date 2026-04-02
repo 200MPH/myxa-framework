@@ -6,11 +6,11 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use Myxa\Database\DatabaseException;
-use Myxa\Database\PdoConnection;
-use Myxa\Database\PdoConnectionConfig;
-use Myxa\Database\QueryBuilder;
-use Myxa\Database\RawExpression;
-use Myxa\Database\SqlInterpolator;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Connection\PdoConnectionConfig;
+use Myxa\Database\Query\QueryBuilder;
+use Myxa\Database\Query\RawExpression;
+use Myxa\Database\Query\SqlInterpolator;
 use Myxa\Support\Facades\DB;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;

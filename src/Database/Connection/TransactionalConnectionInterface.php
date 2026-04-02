@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Connection;
 
 /**
  * Extension contract for drivers that support transactions.

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use InvalidArgumentException;
-use Myxa\Database\PdoConnectionConfig;
+use Myxa\Database\Connection\PdoConnectionConfig;
 use PHPUnit\Framework\TestCase;
 
 final class PdoConnectionConfigTest extends TestCase

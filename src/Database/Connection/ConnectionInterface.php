@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Connection;
 
 /**
  * Generic connection lifecycle contract for DB drivers.

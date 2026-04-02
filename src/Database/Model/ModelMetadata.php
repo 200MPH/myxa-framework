@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Model;
 
 use LogicException;
 use Myxa\Database\Attributes\Cast;

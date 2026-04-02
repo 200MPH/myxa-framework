@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Database;
 
 use InvalidArgumentException;
-use Myxa\Database\SqlInterpolator;
+use Myxa\Database\Query\SqlInterpolator;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use stdClass;

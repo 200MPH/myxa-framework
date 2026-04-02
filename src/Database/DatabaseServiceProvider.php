@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Myxa\Database;
 
 use Myxa\Application;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Connection\PdoConnectionConfig;
+use Myxa\Database\Model\Model;
 use Myxa\Support\Facades\DB;
 use Myxa\Support\ServiceProvider;
 

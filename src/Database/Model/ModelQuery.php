@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Model;
+
+use Myxa\Database\DatabaseManager;
+use Myxa\Database\Query\QueryBuilder;
 
 /**
  * Read-focused query helper for models.

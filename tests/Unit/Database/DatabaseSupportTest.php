@@ -6,7 +6,7 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use Myxa\Database\DatabaseConnectionException;
-use Myxa\Database\PdoConnectionConfig;
+use Myxa\Database\Connection\PdoConnectionConfig;
 use PDOException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;

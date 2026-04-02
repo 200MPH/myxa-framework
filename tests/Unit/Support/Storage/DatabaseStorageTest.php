@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Test\Unit\Support\Storage;
 
 use Myxa\Database\DatabaseManager;
-use Myxa\Database\PdoConnection;
-use Myxa\Database\PdoConnectionConfig;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Support\Storage\Db\DatabaseStorage;
 use Myxa\Support\Storage\StorageException;
 use Myxa\Support\Storage\StoredFile;

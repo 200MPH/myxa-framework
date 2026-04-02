@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Model;
 
 use InvalidArgumentException;
 use JsonSerializable;
 use JsonException;
 use LogicException;
 use Myxa\Database\Attributes\Internal;
+use Myxa\Database\DatabaseManager;
 
 /**
  * Minimal active-record style model built on top of DatabaseManager.

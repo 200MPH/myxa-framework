@@ -7,7 +7,7 @@ namespace Myxa\Support\Storage\Db;
 use InvalidArgumentException;
 use JsonException;
 use Myxa\Database\DatabaseManager;
-use Myxa\Database\QueryBuilder;
+use Myxa\Database\Query\QueryBuilder;
 use Myxa\Support\Storage\AbstractStorage;
 use Myxa\Support\Storage\StorageException;
 use Myxa\Support\Storage\StoredFile;

@@ -6,6 +6,11 @@ namespace Myxa\Database;
 
 use Closure;
 use InvalidArgumentException;
+use Myxa\Database\Connection\PdoConnection;
+use Myxa\Database\Connection\PdoConnectionConfig;
+use Myxa\Database\Query\QueryBuilder;
+use Myxa\Database\Query\RawExpression;
+use Myxa\Database\Query\SqlInterpolator;
 use PDO;
 use PDOException;
 use PDOStatement;
