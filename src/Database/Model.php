@@ -4,37 +4,17 @@ declare(strict_types=1);
 
 namespace Myxa\Database;
 
-use DateTime;
-use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonSerializable;
 use JsonException;
 use LogicException;
-use Myxa\Database\Attributes\Cast;
-use Myxa\Database\Attributes\Guarded;
-use Myxa\Database\Attributes\Hidden;
 use Myxa\Database\Attributes\Internal;
-use ReflectionAttribute;
-use ReflectionObject;
-use ReflectionProperty;
 
 /**
  * Minimal active-record style model built on top of DatabaseManager.
  */
 abstract class Model implements JsonSerializable
 {
-    /** @var array<class-string, array<string, ReflectionProperty>> */
-    private static array $declaredPropertyCache = [];
-
-    /** @var array<class-string, array<string, true>> */
-    private static array $guardedPropertyCache = [];
-
-    /** @var array<class-string, array<string, true>> */
-    private static array $hiddenPropertyCache = [];
-
-    /** @var array<class-string, array<string, Cast>> */
-    private static array $castPropertyCache = [];
-
     private static ?DatabaseManager $sharedManager = null;
 
     #[Internal]
@@ -243,12 +223,14 @@ abstract class Model implements JsonSerializable
      */
     public function fill(array $attributes): static
     {
+        $metadata = $this->propertyMetadata();
+
         foreach ($attributes as $key => $value) {
             if (!is_string($key) || trim($key) === '') {
                 throw new InvalidArgumentException('Model attribute keys must be non-empty strings.');
             }
 
-            if (!$this->hasDeclaredProperty($key)) {
+            if (!$metadata->hasDeclaredProperty($key)) {
                 throw new InvalidArgumentException(sprintf(
                     'Cannot mass-assign unknown attribute "%s" on model %s.',
                     $key,
@@ -256,7 +238,7 @@ abstract class Model implements JsonSerializable
                 ));
             }
 
-            if ($this->isGuardedProperty($key)) {
+            if ($metadata->isGuardedProperty($key)) {
                 continue;
             }
 
@@ -287,7 +269,7 @@ abstract class Model implements JsonSerializable
      */
     public function getAttribute(string $key): mixed
     {
-        if ($this->hasDeclaredProperty($key)) {
+        if ($this->propertyMetadata()->hasDeclaredProperty($key)) {
             return $this->readDeclaredProperty($key);
         }
 
@@ -341,7 +323,7 @@ abstract class Model implements JsonSerializable
      */
     public function __unset(string $name): void
     {
-        if ($this->hasDeclaredProperty($name)) {
+        if ($this->propertyMetadata()->hasDeclaredProperty($name)) {
             $this->writeDeclaredProperty($name, null);
 
             return;
@@ -360,12 +342,13 @@ abstract class Model implements JsonSerializable
     public function toArray(): array
     {
         $attributes = $this->allAttributes();
+        $valueCaster = $this->valueCaster();
 
         foreach ($attributes as $key => $value) {
-            $attributes[$key] = $this->serializeAttributeValue($key, $value);
+            $attributes[$key] = $valueCaster->serializeAttributeValue($key, $value);
         }
 
-        foreach (array_keys($this->hiddenProperties()) as $key) {
+        foreach (array_keys($this->propertyMetadata()->hiddenProperties()) as $key) {
             unset($attributes[$key]);
         }
 
@@ -575,8 +558,9 @@ abstract class Model implements JsonSerializable
     private function declaredAttributes(): array
     {
         $attributes = [];
+        $declaredProperties = $this->propertyMetadata()->declaredProperties();
 
-        foreach ($this->declaredProperties() as $name => $property) {
+        foreach ($declaredProperties as $name => $property) {
             $attributes[$name] = $property->isInitialized($this)
                 ? $property->getValue($this)
                 : null;
@@ -626,6 +610,7 @@ abstract class Model implements JsonSerializable
     private function filterPersistableAttributes(array $attributes): array
     {
         $persisted = [];
+        $valueCaster = $this->valueCaster();
 
         foreach ($attributes as $key => $value) {
             if (!is_string($key) || trim($key) === '') {
@@ -636,7 +621,7 @@ abstract class Model implements JsonSerializable
                 $value = $value->value;
             }
 
-            $value = $this->serializeAttributeValue($key, $value);
+            $value = $valueCaster->serializeAttributeValue($key, $value);
 
             if (is_string($value) || is_int($value) || is_float($value) || is_bool($value) || $value === null) {
                 $persisted[$key] = $value;
@@ -693,7 +678,7 @@ abstract class Model implements JsonSerializable
 
     private function hasDeclaredProperty(string $name): bool
     {
-        return array_key_exists($name, $this->declaredProperties());
+        return $this->propertyMetadata()->hasDeclaredProperty($name);
     }
 
     private function canWriteAttribute(string $name): bool
@@ -703,19 +688,9 @@ abstract class Model implements JsonSerializable
             || array_key_exists($name, $this->attributes);
     }
 
-    private function isGuardedProperty(string $name): bool
-    {
-        return isset($this->guardedProperties()[$name]);
-    }
-
-    private function castForProperty(string $name): ?Cast
-    {
-        return $this->castProperties()[$name] ?? null;
-    }
-
     private function readDeclaredProperty(string $name): mixed
     {
-        $property = $this->declaredProperties()[$name];
+        $property = $this->propertyMetadata()->declaredProperties()[$name];
 
         return $property->isInitialized($this)
             ? $property->getValue($this)
@@ -724,13 +699,13 @@ abstract class Model implements JsonSerializable
 
     private function writeDeclaredProperty(string $name, mixed $value): void
     {
-        $this->declaredProperties()[$name]->setValue($this, $value);
+        $this->propertyMetadata()->declaredProperties()[$name]->setValue($this, $value);
     }
 
     private function writeAttributeValue(string $name, mixed $value): void
     {
-        if ($this->hasDeclaredProperty($name)) {
-            $this->writeDeclaredProperty($name, $this->castAttributeValue($name, $value));
+        if ($this->propertyMetadata()->hasDeclaredProperty($name)) {
+            $this->writeDeclaredProperty($name, $this->valueCaster()->castAttributeValue($name, $value));
 
             return;
         }
@@ -738,211 +713,14 @@ abstract class Model implements JsonSerializable
         $this->attributes[$name] = $value;
     }
 
-    /**
-     * @return array<string, ReflectionProperty>
-     */
-    private function declaredProperties(): array
+    private function propertyMetadata(): ModelMetadata
     {
-        return self::$declaredPropertyCache[static::class] ??= $this->buildDeclaredPropertyCache();
+        return new ModelMetadata($this);
     }
 
-    /**
-     * @return array<string, true>
-     */
-    private function guardedProperties(): array
+    private function valueCaster(): ModelValueCaster
     {
-        return self::$guardedPropertyCache[static::class] ??= $this->buildAttributedPropertyCache(Guarded::class);
-    }
-
-    /**
-     * @return array<string, true>
-     */
-    private function hiddenProperties(): array
-    {
-        return self::$hiddenPropertyCache[static::class] ??= $this->buildAttributedPropertyCache(Hidden::class);
-    }
-
-    /**
-     * @return array<string, Cast>
-     */
-    private function castProperties(): array
-    {
-        return self::$castPropertyCache[static::class] ??= $this->buildCastPropertyCache();
-    }
-
-    /**
-     * @return array<string, ReflectionProperty>
-     */
-    private function buildDeclaredPropertyCache(): array
-    {
-        $properties = [];
-        $seen = [];
-        $reflection = new ReflectionObject($this);
-
-        foreach ($reflection->getProperties() as $property) {
-            $name = $property->getName();
-            if ($property->isStatic() || isset($seen[$name]) || $this->isInternalProperty($property)) {
-                continue;
-            }
-
-            $seen[$name] = true;
-            $properties[$name] = $property;
-        }
-
-        return $properties;
-    }
-
-    /**
-     * @param class-string $attributeClass
-     * @return array<string, true>
-     */
-    private function buildAttributedPropertyCache(string $attributeClass): array
-    {
-        $properties = [];
-
-        foreach ($this->declaredProperties() as $name => $property) {
-            if ($property->getAttributes($attributeClass) === []) {
-                continue;
-            }
-
-            $properties[$name] = true;
-        }
-
-        return $properties;
-    }
-
-    /**
-     * @return array<string, Cast>
-     */
-    private function buildCastPropertyCache(): array
-    {
-        $properties = [];
-
-        foreach ($this->declaredProperties() as $name => $property) {
-            $attributes = $property->getAttributes(Cast::class, ReflectionAttribute::IS_INSTANCEOF);
-            if ($attributes === []) {
-                continue;
-            }
-
-            if (count($attributes) > 1) {
-                throw new LogicException(sprintf(
-                    'Property "%s" on model %s cannot declare more than one Cast attribute.',
-                    $name,
-                    static::class,
-                ));
-            }
-
-            $properties[$name] = $attributes[0]->newInstance();
-        }
-
-        return $properties;
-    }
-
-    private function castAttributeValue(string $name, mixed $value): mixed
-    {
-        $cast = $this->castForProperty($name);
-        if ($cast === null || $value === null) {
-            return $value;
-        }
-
-        return match ($cast->type) {
-            CastType::DateTime => $this->castToDateTime($name, $value, $cast->format, DateTime::class),
-            CastType::DateTimeImmutable => $this->castToDateTime($name, $value, $cast->format, DateTimeImmutable::class),
-        };
-    }
-
-    private function serializeAttributeValue(string $name, mixed $value): mixed
-    {
-        if (!$value instanceof \DateTimeInterface) {
-            return $value;
-        }
-
-        $format = $this->castForProperty($name)?->format ?? DATE_ATOM;
-
-        return $value->format($format);
-    }
-
-    /**
-     * @param class-string<\DateTime|\DateTimeImmutable> $dateTimeClass
-     */
-    private function castToDateTime(string $name, mixed $value, ?string $format, string $dateTimeClass): \DateTimeInterface
-    {
-        if ($dateTimeClass === DateTimeImmutable::class && $value instanceof DateTimeImmutable) {
-            return $value;
-        }
-
-        if ($dateTimeClass === DateTime::class && $value instanceof DateTime) {
-            return $value;
-        }
-
-        if ($value instanceof \DateTimeInterface) {
-            return $dateTimeClass === DateTimeImmutable::class
-                ? DateTimeImmutable::createFromInterface($value)
-                : DateTime::createFromInterface($value);
-        }
-
-        if (!is_string($value)) {
-            throw new InvalidArgumentException(sprintf(
-                'Cannot cast non-string value for property "%s" on model %s to %s.',
-                $name,
-                static::class,
-                $dateTimeClass,
-            ));
-        }
-
-        $dateTime = $format !== null
-            ? $dateTimeClass::createFromFormat($format, $value)
-            : new $dateTimeClass($value);
-
-        if (!$dateTime instanceof \DateTimeInterface) {
-            throw new InvalidArgumentException(sprintf(
-                'Cannot cast value "%s" for property "%s" on model %s to %s.',
-                $value,
-                $name,
-                static::class,
-                $dateTimeClass,
-            ));
-        }
-
-        $errors = \DateTime::getLastErrors();
-        if (is_array($errors) && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0)) {
-            throw new InvalidArgumentException(sprintf(
-                'Cannot cast value "%s" for property "%s" on model %s to %s.',
-                $value,
-                $name,
-                static::class,
-                $dateTimeClass,
-            ));
-        }
-
-        return $dateTime;
-    }
-
-    private function isInternalProperty(ReflectionProperty $property): bool
-    {
-        if ($property->getAttributes(Internal::class, ReflectionAttribute::IS_INSTANCEOF) !== []) {
-            return true;
-        }
-
-        return $this->inheritsInternalProperty($property->getName(), $property->getDeclaringClass()->getName());
-    }
-
-    private function inheritsInternalProperty(string $propertyName, string $declaringClass): bool
-    {
-        $parentClass = get_parent_class($declaringClass);
-
-        while (is_string($parentClass)) {
-            $reflection = new \ReflectionClass($parentClass);
-            if ($reflection->hasProperty($propertyName)) {
-                $property = $reflection->getProperty($propertyName);
-
-                return $property->getAttributes(Internal::class, ReflectionAttribute::IS_INSTANCEOF) !== [];
-            }
-
-            $parentClass = get_parent_class($parentClass);
-        }
-
-        return false;
+        return new ModelValueCaster($this->propertyMetadata(), static::class);
     }
 
     private function copyStateFrom(self $model): void
