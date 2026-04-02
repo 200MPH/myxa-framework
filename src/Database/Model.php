@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Myxa\Database;
 
+use DateTime;
+use DateTimeImmutable;
 use InvalidArgumentException;
 use JsonSerializable;
 use JsonException;
@@ -11,6 +13,7 @@ use LogicException;
 use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
+use Myxa\Database\Attributes\Internal;
 use ReflectionAttribute;
 use ReflectionObject;
 use ReflectionProperty;
@@ -20,17 +23,6 @@ use ReflectionProperty;
  */
 abstract class Model implements JsonSerializable
 {
-    private const array INTERNAL_PROPERTIES = [
-        'attributes',
-        'extras',
-        'resolvedManager',
-        'exists',
-        'readOnly',
-        'table',
-        'primaryKey',
-        'connection',
-    ];
-
     /** @var array<class-string, array<string, ReflectionProperty>> */
     private static array $declaredPropertyCache = [];
 
@@ -45,25 +37,31 @@ abstract class Model implements JsonSerializable
 
     private static ?DatabaseManager $sharedManager = null;
 
+    #[Internal]
     protected string $table = '';
 
+    #[Internal]
     protected string $primaryKey = 'id';
 
+    #[Internal]
     protected ?string $connection = null;
 
     /** @var array<string, mixed> */
+    #[Internal]
     private array $attributes = [];
 
-    /** @var array<string, mixed> */
-    private array $extras = [];
-
+    #[Internal]
     private ?DatabaseManager $resolvedManager = null;
 
+    #[Internal]
     private bool $exists = false;
 
+    #[Internal]
     private bool $readOnly = false;
 
     /**
+     * Create a new model instance and optionally prefill declared attributes.
+     *
      * @param array<string, mixed> $attributes
      */
     final public function __construct(array $attributes = [], ?DatabaseManager $manager = null)
@@ -72,22 +70,34 @@ abstract class Model implements JsonSerializable
         $this->fill($attributes);
     }
 
+    /**
+     * Clone the model into a new unsaved instance with a cleared primary key.
+     */
     public function __clone()
     {
         $this->exists = false;
         $this->setAttribute(static::primaryKey(), null);
     }
 
+    /**
+     * Set the shared database manager used by models without an injected manager.
+     */
     public static function setManager(DatabaseManager $manager): void
     {
         self::$sharedManager = $manager;
     }
 
+    /**
+     * Clear the shared database manager so a new one will be resolved lazily.
+     */
     public static function clearManager(): void
     {
         self::$sharedManager = null;
     }
 
+    /**
+     * Return the table name configured for the model.
+     */
     public static function table(): string
     {
         $table = trim(static::metadata()->table);
@@ -98,6 +108,9 @@ abstract class Model implements JsonSerializable
         return $table;
     }
 
+    /**
+     * Return the primary key column name configured for the model.
+     */
     public static function primaryKey(): string
     {
         $primaryKey = trim(static::metadata()->primaryKey);
@@ -108,12 +121,17 @@ abstract class Model implements JsonSerializable
         return $primaryKey;
     }
 
+    /**
+     * Return the optional connection alias configured for the model.
+     */
     public static function connectionName(): ?string
     {
         return static::normalizeOptionalMetadata(static::metadata()->connection);
     }
 
     /**
+     * Build a new unsaved model instance.
+     *
      * @param array<string, mixed> $attributes
      */
     public static function make(array $attributes = []): static
@@ -122,6 +140,8 @@ abstract class Model implements JsonSerializable
     }
 
     /**
+     * Create, persist, and return a new model instance.
+     *
      * @param array<string, mixed> $attributes
      */
     public static function create(array $attributes): static
@@ -132,12 +152,17 @@ abstract class Model implements JsonSerializable
         return $model;
     }
 
+    /**
+     * Start a new query builder scoped to this model class.
+     */
     public static function query(): ModelQuery
     {
         return static::newQuery();
     }
 
     /**
+     * Retrieve all model records with optional pagination.
+     *
      * @return list<static>
      */
     public static function all(?int $limit = null, int $offset = 0): array
@@ -147,17 +172,25 @@ abstract class Model implements JsonSerializable
             ->get();
     }
 
+    /**
+     * Find a model by its primary key or return null when missing.
+     */
     public static function find(int|string $id): ?static
     {
         return static::newQuery()->find($id);
     }
 
+    /**
+     * Find a model by its primary key or throw when no record exists.
+     */
     public static function findOrFail(int|string $id): static
     {
         return static::newQuery()->findOrFail($id);
     }
 
     /**
+     * Hydrate a persisted model instance from trusted storage data.
+     *
      * @param array<string, mixed> $attributes
      */
     public static function hydrate(array $attributes, ?DatabaseManager $manager = null): static
@@ -169,16 +202,25 @@ abstract class Model implements JsonSerializable
         return $model;
     }
 
+    /**
+     * Determine whether the model currently represents a persisted record.
+     */
     public function exists(): bool
     {
         return $this->exists;
     }
 
+    /**
+     * Determine whether write operations are currently disabled for the model.
+     */
     public function isReadOnly(): bool
     {
         return $this->readOnly;
     }
 
+    /**
+     * Enable or disable read-only mode for the current model instance.
+     */
     public function setReadOnly(bool $readOnly = true): static
     {
         $this->readOnly = $readOnly;
@@ -186,12 +228,17 @@ abstract class Model implements JsonSerializable
         return $this;
     }
 
+    /**
+     * Return the current primary key value for the model.
+     */
     public function getKey(): int|string|null
     {
         return $this->getAttribute(static::primaryKey());
     }
 
     /**
+     * Mass-assign declared, non-guarded attributes onto the model.
+     *
      * @param array<string, mixed> $attributes
      */
     public function fill(array $attributes): static
@@ -235,6 +282,9 @@ abstract class Model implements JsonSerializable
         return $this;
     }
 
+    /**
+     * Read a declared model property or previously hydrated storage attribute.
+     */
     public function getAttribute(string $key): mixed
     {
         if ($this->hasDeclaredProperty($key)) {
@@ -244,11 +294,14 @@ abstract class Model implements JsonSerializable
         return $this->attributes[$key] ?? null;
     }
 
+    /**
+     * Assign a known model attribute, including loaded primary key values.
+     */
     public function setAttribute(string $key, mixed $value): static
     {
         if (!$this->canWriteAttribute($key)) {
             throw new InvalidArgumentException(sprintf(
-                'Cannot set unknown attribute "%s" on model %s. Use extra() for ad-hoc helper data.',
+                'Cannot set unknown attribute "%s" on model %s.',
                 $key,
                 static::class,
             ));
@@ -259,45 +312,33 @@ abstract class Model implements JsonSerializable
         return $this;
     }
 
-    public function extra(string $key, mixed $value): static
-    {
-        if (trim($key) === '') {
-            throw new InvalidArgumentException('Extra keys must be non-empty strings.');
-        }
-
-        $this->extras[$key] = $value;
-
-        return $this;
-    }
-
-    public function getExtra(string $key, mixed $default = null): mixed
-    {
-        return $this->extras[$key] ?? $default;
-    }
-
     /**
-     * @return array<string, mixed>
+     * Proxy dynamic property reads to model attributes.
      */
-    public function extras(): array
-    {
-        return $this->extras;
-    }
-
     public function __get(string $name): mixed
     {
         return $this->getAttribute($name);
     }
 
+    /**
+     * Proxy dynamic property writes to model attributes.
+     */
     public function __set(string $name, mixed $value): void
     {
         $this->setAttribute($name, $value);
     }
 
+    /**
+     * Determine whether a model attribute currently resolves to a non-null value.
+     */
     public function __isset(string $name): bool
     {
         return $this->getAttribute($name) !== null;
     }
 
+    /**
+     * Clear a declared property or hydrated attribute from the model instance.
+     */
     public function __unset(string $name): void
     {
         if ($this->hasDeclaredProperty($name)) {
@@ -308,14 +349,12 @@ abstract class Model implements JsonSerializable
 
         if (array_key_exists($name, $this->attributes)) {
             unset($this->attributes[$name]);
-
-            return;
         }
-
-        unset($this->extras[$name]);
     }
 
     /**
+     * Convert the model into an array suitable for API output or JSON serialization.
+     *
      * @return array<string, mixed>
      */
     public function toArray(): array
@@ -334,6 +373,8 @@ abstract class Model implements JsonSerializable
     }
 
     /**
+     * Return the serializable payload used by json_encode().
+     *
      * @return array<string, mixed>
      */
     public function jsonSerialize(): array
@@ -351,6 +392,9 @@ abstract class Model implements JsonSerializable
         return json_encode($this->jsonSerialize(), JSON_THROW_ON_ERROR | $flags);
     }
 
+    /**
+     * Reload the model from storage and replace the current in-memory state.
+     */
     public function refresh(): static
     {
         $key = $this->getKey();
@@ -368,6 +412,9 @@ abstract class Model implements JsonSerializable
         return $this;
     }
 
+    /**
+     * Insert or update the model in storage depending on its persisted state.
+     */
     public function save(): bool
     {
         if ($this->readOnly) {
@@ -418,6 +465,9 @@ abstract class Model implements JsonSerializable
         return true;
     }
 
+    /**
+     * Delete the persisted model record and clear its in-memory key.
+     */
     public function delete(): bool
     {
         if ($this->readOnly || !$this->exists) {
@@ -796,14 +846,8 @@ abstract class Model implements JsonSerializable
         }
 
         return match ($cast->type) {
-            'datetime' => $this->castToDateTime($name, $value, $cast->format, \DateTime::class),
-            'datetime_immutable' => $this->castToDateTime($name, $value, $cast->format, \DateTimeImmutable::class),
-            default => throw new LogicException(sprintf(
-                'Unsupported cast type "%s" for property "%s" on model %s.',
-                $cast->type,
-                $name,
-                static::class,
-            )),
+            CastType::DateTime => $this->castToDateTime($name, $value, $cast->format, DateTime::class),
+            CastType::DateTimeImmutable => $this->castToDateTime($name, $value, $cast->format, DateTimeImmutable::class),
         };
     }
 
@@ -823,18 +867,18 @@ abstract class Model implements JsonSerializable
      */
     private function castToDateTime(string $name, mixed $value, ?string $format, string $dateTimeClass): \DateTimeInterface
     {
-        if ($dateTimeClass === \DateTimeImmutable::class && $value instanceof \DateTimeImmutable) {
+        if ($dateTimeClass === DateTimeImmutable::class && $value instanceof DateTimeImmutable) {
             return $value;
         }
 
-        if ($dateTimeClass === \DateTime::class && $value instanceof \DateTime) {
+        if ($dateTimeClass === DateTime::class && $value instanceof DateTime) {
             return $value;
         }
 
         if ($value instanceof \DateTimeInterface) {
-            return $dateTimeClass === \DateTimeImmutable::class
-                ? \DateTimeImmutable::createFromInterface($value)
-                : \DateTime::createFromInterface($value);
+            return $dateTimeClass === DateTimeImmutable::class
+                ? DateTimeImmutable::createFromInterface($value)
+                : DateTime::createFromInterface($value);
         }
 
         if (!is_string($value)) {
@@ -874,37 +918,31 @@ abstract class Model implements JsonSerializable
         return $dateTime;
     }
 
-    protected function internalPropertyNames(): array
-    {
-        return array_merge(
-            self::INTERNAL_PROPERTIES,
-            $this->traitInternalPropertyNames(),
-        );
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function traitInternalPropertyNames(): array
-    {
-        $properties = [];
-
-        foreach (['timestampInternalPropertyNames', 'blameableInternalPropertyNames'] as $method) {
-            if (!method_exists($this, $method)) {
-                continue;
-            }
-
-            /** @var list<string> $traitProperties */
-            $traitProperties = $this->{$method}();
-            $properties = array_merge($properties, $traitProperties);
-        }
-
-        return $properties;
-    }
-
     private function isInternalProperty(ReflectionProperty $property): bool
     {
-        return in_array($property->getName(), $this->internalPropertyNames(), true);
+        if ($property->getAttributes(Internal::class, ReflectionAttribute::IS_INSTANCEOF) !== []) {
+            return true;
+        }
+
+        return $this->inheritsInternalProperty($property->getName(), $property->getDeclaringClass()->getName());
+    }
+
+    private function inheritsInternalProperty(string $propertyName, string $declaringClass): bool
+    {
+        $parentClass = get_parent_class($declaringClass);
+
+        while (is_string($parentClass)) {
+            $reflection = new \ReflectionClass($parentClass);
+            if ($reflection->hasProperty($propertyName)) {
+                $property = $reflection->getProperty($propertyName);
+
+                return $property->getAttributes(Internal::class, ReflectionAttribute::IS_INSTANCEOF) !== [];
+            }
+
+            $parentClass = get_parent_class($parentClass);
+        }
+
+        return false;
     }
 
     private function copyStateFrom(self $model): void

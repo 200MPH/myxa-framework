@@ -5,14 +5,10 @@ declare(strict_types=1);
 namespace Myxa\Database;
 
 use LogicException;
+use Myxa\Database\Attributes\Internal;
 
 trait HasBlameable
 {
-    private const array INTERNAL_BLAMEABLE_PROPERTIES = [
-        'createdByColumn',
-        'updatedByColumn',
-    ];
-
     /** @var null|callable(static): int|string|null */
     private static $blameResolver = null;
 
@@ -20,8 +16,10 @@ trait HasBlameable
 
     protected int|string|null $updated_by = null;
 
+    #[Internal]
     protected ?string $createdByColumn = 'created_by';
 
+    #[Internal]
     protected ?string $updatedByColumn = 'updated_by';
 
     public static function setBlameResolver(?callable $resolver): void
@@ -52,15 +50,6 @@ trait HasBlameable
             $this->setAttribute($updatedByColumn, $actor);
         }
     }
-
-    /**
-     * @return list<string>
-     */
-    protected function blameableInternalPropertyNames(): array
-    {
-        return self::INTERNAL_BLAMEABLE_PROPERTIES;
-    }
-
     private function normalizeBlameableColumn(?string $column, string $property): ?string
     {
         if ($column === null) {

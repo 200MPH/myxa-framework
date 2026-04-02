@@ -6,20 +6,18 @@ namespace Myxa\Database;
 
 use DateTimeImmutable;
 use LogicException;
+use Myxa\Database\Attributes\Internal;
 
 trait HasTimestamps
 {
-    private const array INTERNAL_TIMESTAMP_PROPERTIES = [
-        'createdAtColumn',
-        'updatedAtColumn',
-    ];
-
     protected ?string $created_at = null;
 
     protected ?string $updated_at = null;
 
+    #[Internal]
     protected ?string $createdAtColumn = 'created_at';
 
+    #[Internal]
     protected ?string $updatedAtColumn = 'updated_at';
 
     protected function applyTimestamps(): void
@@ -49,13 +47,5 @@ trait HasTimestamps
         }
 
         return $column;
-    }
-
-    /**
-     * @return list<string>
-     */
-    protected function timestampInternalPropertyNames(): array
-    {
-        return self::INTERNAL_TIMESTAMP_PROPERTIES;
     }
 }

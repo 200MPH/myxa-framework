@@ -10,6 +10,8 @@ use Myxa\Database\DatabaseManager;
 use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
+use Myxa\Database\Attributes\Internal;
+use Myxa\Database\CastType;
 use Myxa\Database\HasBlameable;
 use Myxa\Database\HasTimestamps;
 use Myxa\Database\Model;
@@ -80,11 +82,28 @@ final class CastedUser extends Model
 
     protected string $status = '';
 
-    #[Cast('datetime_immutable', format: DATE_ATOM)]
+    #[Cast(CastType::DateTimeImmutable, format: DATE_ATOM)]
     protected ?DateTimeImmutable $created_at = null;
 
-    #[Cast('datetime_immutable', format: DATE_ATOM)]
+    #[Cast(CastType::DateTimeImmutable, format: DATE_ATOM)]
     protected ?DateTimeImmutable $updated_at = null;
+}
+
+final class InternalPropertyUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Internal]
+    protected string $helperLabel = 'draft';
+
+    public function helperLabel(): string
+    {
+        return $this->helperLabel;
+    }
 }
 
 final class Profile extends Model
@@ -289,7 +308,7 @@ final class ModelTest extends TestCase
         self::assertArrayNotHasKey('password_hash', $user->toArray());
     }
 
-    public function testSettingUnknownAttributesRequiresExtras(): void
+    public function testSettingUnknownAttributesThrowsException(): void
     {
         $user = new User([
             'email' => 'strict@example.com',
@@ -298,30 +317,30 @@ final class ModelTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage(sprintf(
-            'Cannot set unknown attribute "nickname" on model %s. Use extra() for ad-hoc helper data.',
+            'Cannot set unknown attribute "nickname" on model %s.',
             User::class,
         ));
 
         $user->setAttribute('nickname', 'Bird');
     }
 
-    public function testExtrasStoreAdHocHelperDataOutsideModelAttributes(): void
+    public function testInternalPropertiesStayOutsideModelFieldLogic(): void
     {
-        $user = new User([
+        $user = new InternalPropertyUser([
             'email' => 'helper@example.com',
             'status' => 'active',
         ]);
 
-        $user->extra('nickname', 'Bird');
-        $user->extra('is_online', true);
+        self::assertSame('draft', $user->helperLabel());
+        self::assertArrayNotHasKey('helperLabel', $user->toArray());
 
-        self::assertSame('Bird', $user->getExtra('nickname'));
-        self::assertTrue($user->getExtra('is_online'));
-        self::assertSame(
-            ['nickname' => 'Bird', 'is_online' => true],
-            $user->extras(),
-        );
-        self::assertArrayNotHasKey('nickname', $user->toArray());
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot mass-assign unknown attribute "helperLabel" on model %s.',
+            InternalPropertyUser::class,
+        ));
+
+        $user->fill(['helperLabel' => 'updated']);
     }
 
     public function testHydrationBypassesGuardedFillForPersistedAttributes(): void
