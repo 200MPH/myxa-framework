@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Http;
 
 use InvalidArgumentException;
+use Myxa\Auth\AuthenticationException;
 use Myxa\Database\Model\ModelNotFoundException;
 use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteNotFoundException;
@@ -21,6 +22,7 @@ final class ExceptionHttpMapper
             $exception instanceof RouteNotFoundException,
             $exception instanceof ModelNotFoundException => 404,
             $exception instanceof MethodNotAllowedException => 405,
+            $exception instanceof AuthenticationException => 401,
             $exception instanceof InvalidArgumentException => 400,
             default => 500,
         };

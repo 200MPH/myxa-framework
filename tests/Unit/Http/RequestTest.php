@@ -137,6 +137,27 @@ final class RequestTest extends TestCase
         self::assertSame(443, $request->port());
     }
 
+    public function testRequestExtractsBearerTokenWhenAuthorizationHeaderIsPresent(): void
+    {
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/api/me',
+            'HTTP_AUTHORIZATION' => 'Bearer token-123',
+        ]);
+
+        self::assertSame('token-123', $request->bearerToken());
+    }
+
+    public function testRequestReturnsNullBearerTokenWhenAuthorizationHeaderIsMissing(): void
+    {
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/api/me',
+        ]);
+
+        self::assertNull($request->bearerToken());
+    }
+
     public function testRequestFallsBackToLocalhostAndIgnoresInvalidHeaderEntries(): void
     {
         $request = new Request(

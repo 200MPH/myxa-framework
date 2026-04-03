@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Http;
 
+use Myxa\Auth\AuthenticationException;
 use Myxa\Database\Model\ModelNotFoundException;
 use Myxa\Http\DefaultExceptionHandler;
 use Myxa\Http\ExceptionHttpMapper;
@@ -81,10 +82,44 @@ final class DefaultExceptionHandlerTest extends TestCase
         );
     }
 
+    public function testHandlerRedirectsAuthenticationExceptionsForBrowserRequests(): void
+    {
+        $handler = new DefaultExceptionHandler();
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/dashboard',
+        ]);
+
+        $response = $handler->render(new AuthenticationException('web', '/login'), $request);
+
+        self::assertSame(302, $response->statusCode());
+        self::assertSame('/login', $response->header('Location'));
+    }
+
+    public function testHandlerRendersJsonAuthenticationErrorsForApiRequests(): void
+    {
+        $handler = new DefaultExceptionHandler();
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/api/me',
+            'HTTP_ACCEPT' => 'application/json',
+        ]);
+
+        $response = $handler->render(new AuthenticationException('api'), $request);
+
+        self::assertSame(401, $response->statusCode());
+        self::assertSame('Bearer', $response->header('WWW-Authenticate'));
+        self::assertSame(
+            '{"error":{"type":"unauthenticated","message":"Unauthenticated.","status":401}}',
+            $response->content(),
+        );
+    }
+
     public function testExceptionHttpMapperResolvesStatuses(): void
     {
         self::assertSame(404, ExceptionHttpMapper::statusCodeFor(new RouteNotFoundException('GET', '/missing')));
         self::assertSame(405, ExceptionHttpMapper::statusCodeFor(new MethodNotAllowedException('POST', '/posts', ['GET'])));
+        self::assertSame(401, ExceptionHttpMapper::statusCodeFor(new AuthenticationException()));
         self::assertSame(500, ExceptionHttpMapper::statusCodeFor(new \RuntimeException('Boom')));
     }
 

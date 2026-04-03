@@ -210,6 +210,14 @@ final class Request
     }
 
     /**
+     * Return the bearer token from the Authorization header when present.
+     */
+    public static function bearerToken(): ?string
+    {
+        return self::getRequest()->bearerToken();
+    }
+
+    /**
      * Return the client IP address when available.
      */
     public static function ip(): ?string

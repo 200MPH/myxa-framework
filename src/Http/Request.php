@@ -298,6 +298,21 @@ final class Request
     }
 
     /**
+     * Return the bearer token from the Authorization header when present.
+     */
+    public function bearerToken(): ?string
+    {
+        $header = trim((string) $this->header('Authorization', ''));
+        if ($header === '' || !preg_match('/^Bearer\s+(.+)$/i', $header, $matches)) {
+            return null;
+        }
+
+        $token = trim($matches[1]);
+
+        return $token === '' ? null : $token;
+    }
+
+    /**
      * Determine whether the client expects a JSON response.
      */
     public function expectsJson(): bool

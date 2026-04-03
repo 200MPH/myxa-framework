@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Http;
 
+use Myxa\Auth\AuthenticationException;
 use Myxa\Routing\MethodNotAllowedException;
 use Throwable;
 
@@ -14,6 +15,10 @@ final class DefaultExceptionHandler implements ExceptionHandlerInterface
         $status = ExceptionHttpMapper::statusCodeFor($exception);
         $message = $this->messageFor($exception, $status);
         $response = new Response();
+
+        if ($exception instanceof AuthenticationException && !$request->expectsJson()) {
+            return $response->redirect($exception->redirectTo());
+        }
 
         if ($request->expectsJson()) {
             $response->json([
@@ -31,6 +36,10 @@ final class DefaultExceptionHandler implements ExceptionHandlerInterface
             $response->setHeader('Allow', implode(', ', $exception->allowedMethods()));
         }
 
+        if ($exception instanceof AuthenticationException && $exception->guard() === 'api') {
+            $response->setHeader('WWW-Authenticate', 'Bearer');
+        }
+
         return $response;
     }
 
@@ -45,6 +54,10 @@ final class DefaultExceptionHandler implements ExceptionHandlerInterface
 
     protected function errorTypeFor(Throwable $exception): string
     {
+        if ($exception instanceof AuthenticationException) {
+            return 'unauthenticated';
+        }
+
         $class = $exception::class;
         $position = strrpos($class, '\\');
         $base = $position === false ? $class : substr($class, $position + 1);
