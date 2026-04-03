@@ -12,6 +12,8 @@ use Myxa\Http\ExceptionHandlerInterface;
 use Myxa\Http\ExceptionHandlerServiceProvider;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
+use Myxa\RateLimit\RateLimitResult;
+use Myxa\RateLimit\TooManyRequestsException;
 use Myxa\Routing\RouteNotFoundException;
 use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Application;
@@ -120,7 +122,30 @@ final class DefaultExceptionHandlerTest extends TestCase
         self::assertSame(404, ExceptionHttpMapper::statusCodeFor(new RouteNotFoundException('GET', '/missing')));
         self::assertSame(405, ExceptionHttpMapper::statusCodeFor(new MethodNotAllowedException('POST', '/posts', ['GET'])));
         self::assertSame(401, ExceptionHttpMapper::statusCodeFor(new AuthenticationException()));
+        self::assertSame(429, ExceptionHttpMapper::statusCodeFor(new TooManyRequestsException(
+            new RateLimitResult('api|127.0.0.1|/posts', 2, 1, 0, 60, 9999999999, true),
+        )));
         self::assertSame(500, ExceptionHttpMapper::statusCodeFor(new \RuntimeException('Boom')));
+    }
+
+    public function testHandlerAddsRateLimitHeadersForTooManyRequestsExceptions(): void
+    {
+        $handler = new DefaultExceptionHandler();
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/api/posts',
+            'HTTP_ACCEPT' => 'application/json',
+        ]);
+
+        $response = $handler->render(new TooManyRequestsException(
+            new RateLimitResult('api|127.0.0.1|/posts', 2, 1, 0, 42, 9999999999, true),
+        ), $request);
+
+        self::assertSame(429, $response->statusCode());
+        self::assertSame('42', $response->header('Retry-After'));
+        self::assertSame('1', $response->header('X-RateLimit-Limit'));
+        self::assertSame('0', $response->header('X-RateLimit-Remaining'));
+        self::assertSame('9999999999', $response->header('X-RateLimit-Reset'));
     }
 
     public function testServiceProviderRegistersDefaultHandlerBinding(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Http;
 
 use Myxa\Auth\AuthenticationException;
+use Myxa\RateLimit\TooManyRequestsException;
 use Myxa\Routing\MethodNotAllowedException;
 use Throwable;
 
@@ -38,6 +39,14 @@ final class DefaultExceptionHandler implements ExceptionHandlerInterface
 
         if ($exception instanceof AuthenticationException && $exception->guard() === 'api') {
             $response->setHeader('WWW-Authenticate', 'Bearer');
+        }
+
+        if ($exception instanceof TooManyRequestsException) {
+            $result = $exception->result();
+            $response->setHeader('Retry-After', (string) $result->retryAfter);
+            $response->setHeader('X-RateLimit-Limit', (string) $result->maxAttempts);
+            $response->setHeader('X-RateLimit-Remaining', (string) $result->remaining);
+            $response->setHeader('X-RateLimit-Reset', (string) $result->resetsAt);
         }
 
         return $response;
