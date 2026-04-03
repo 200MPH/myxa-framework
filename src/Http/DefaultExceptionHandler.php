@@ -5,12 +5,37 @@ declare(strict_types=1);
 namespace Myxa\Http;
 
 use Myxa\Auth\AuthenticationException;
+use Myxa\Logging\LogLevel;
+use Myxa\Logging\LoggerInterface;
+use Myxa\Logging\NullLogger;
 use Myxa\RateLimit\TooManyRequestsException;
 use Myxa\Routing\MethodNotAllowedException;
 use Throwable;
 
 final class DefaultExceptionHandler implements ExceptionHandlerInterface
 {
+    private LoggerInterface $logger;
+
+    public function __construct(?LoggerInterface $logger = null)
+    {
+        $this->logger = $logger ?? new NullLogger();
+    }
+
+    public function report(Throwable $exception): void
+    {
+        $status = ExceptionHttpMapper::statusCodeFor($exception);
+
+        $this->logger->log(
+            $status >= 500 ? LogLevel::Error : LogLevel::Warning,
+            $exception->getMessage(),
+            [
+                'exception' => $exception,
+                'status' => $status,
+                'type' => $this->errorTypeFor($exception),
+            ],
+        );
+    }
+
     public function render(Throwable $exception, Request $request): Response
     {
         $status = ExceptionHttpMapper::statusCodeFor($exception);

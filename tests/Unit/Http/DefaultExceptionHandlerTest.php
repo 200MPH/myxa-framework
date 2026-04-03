@@ -12,6 +12,7 @@ use Myxa\Http\ExceptionHandlerInterface;
 use Myxa\Http\ExceptionHandlerServiceProvider;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
+use Myxa\Logging\LoggerInterface;
 use Myxa\RateLimit\RateLimitResult;
 use Myxa\RateLimit\TooManyRequestsException;
 use Myxa\Routing\RouteNotFoundException;
@@ -156,5 +157,33 @@ final class DefaultExceptionHandlerTest extends TestCase
 
         self::assertInstanceOf(ExceptionHandlerInterface::class, $app->make(ExceptionHandlerInterface::class));
         self::assertInstanceOf(DefaultExceptionHandler::class, $app->make(ExceptionHandlerInterface::class));
+    }
+
+    public function testHandlerReportsExceptionsThroughLogger(): void
+    {
+        $logger = new DefaultExceptionHandlerTestLogger();
+        $handler = new DefaultExceptionHandler($logger);
+
+        $handler->report(new \RuntimeException('Sensitive details'));
+
+        self::assertCount(1, $logger->entries);
+        self::assertSame('error', $logger->entries[0]['level']);
+        self::assertSame('Sensitive details', $logger->entries[0]['message']);
+        self::assertSame(500, $logger->entries[0]['context']['status']);
+    }
+}
+
+final class DefaultExceptionHandlerTestLogger implements LoggerInterface
+{
+    /** @var list<array{level: string, message: string, context: array<string, mixed>}> */
+    public array $entries = [];
+
+    public function log(\Myxa\Logging\LogLevel $level, string $message, array $context = []): void
+    {
+        $this->entries[] = [
+            'level' => $level->value,
+            'message' => $message,
+            'context' => $context,
+        ];
     }
 }

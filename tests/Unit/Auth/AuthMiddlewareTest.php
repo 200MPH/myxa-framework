@@ -11,14 +11,15 @@ use Myxa\Auth\AuthenticationException;
 use Myxa\Auth\BearerTokenResolverInterface;
 use Myxa\Auth\SessionUserResolverInterface;
 use Myxa\Http\DefaultExceptionHandler;
+use Myxa\Http\ExceptionHandlerInterface;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
 use Myxa\Middleware\AuthMiddleware;
-use Myxa\Middleware\HandleExceptionsMiddleware;
 use Myxa\Routing\RouteDefinition;
 use Myxa\Routing\Router;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 
 #[CoversClass(AuthMiddleware::class)]
 #[CoversClass(AuthenticationException::class)]
@@ -58,16 +59,14 @@ final class AuthMiddlewareTest extends TestCase
         $router = new Router($app);
 
         $router->get('/api/me', static fn (): string => 'ok')
-            ->middleware([
-                new HandleExceptionsMiddleware(new DefaultExceptionHandler()),
-                AuthMiddleware::using('api'),
-            ]);
+            ->middleware(AuthMiddleware::using('api'));
 
-        $guestResponse = $router->dispatch(new Request(server: [
+        $guestRequest = new Request(server: [
             'REQUEST_METHOD' => 'GET',
             'REQUEST_URI' => '/api/me',
             'HTTP_ACCEPT' => 'application/json',
-        ]));
+        ]);
+        $guestResponse = $this->dispatchWithExceptionHandler($router, $guestRequest, new DefaultExceptionHandler());
         $authenticatedResponse = $router->dispatch(new Request(server: [
             'REQUEST_METHOD' => 'GET',
             'REQUEST_URI' => '/api/me',
@@ -107,5 +106,19 @@ final class AuthMiddlewareTest extends TestCase
         $route = new RouteDefinition(['GET'], '/dashboard', static fn (): string => 'ok');
 
         self::assertSame('ok', $middleware->handle($request, static fn (): string => 'ok', $route));
+    }
+
+    private function dispatchWithExceptionHandler(
+        Router $router,
+        Request $request,
+        ExceptionHandlerInterface $handler,
+    ): mixed {
+        try {
+            return $router->dispatch($request);
+        } catch (Throwable $exception) {
+            $handler->report($exception);
+
+            return $handler->render($exception, $request);
+        }
     }
 }

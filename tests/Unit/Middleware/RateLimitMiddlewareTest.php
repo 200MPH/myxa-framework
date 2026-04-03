@@ -6,15 +6,16 @@ namespace Test\Unit\Middleware;
 
 use Myxa\Application;
 use Myxa\Http\DefaultExceptionHandler;
+use Myxa\Http\ExceptionHandlerInterface;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
-use Myxa\Middleware\HandleExceptionsMiddleware;
 use Myxa\Middleware\RateLimitMiddleware;
 use Myxa\RateLimit\FileRateLimiterStore;
 use Myxa\RateLimit\RateLimiter;
 use Myxa\Routing\Router;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 
 #[CoversClass(RateLimitMiddleware::class)]
 final class RateLimitMiddlewareTest extends TestCase
@@ -75,10 +76,7 @@ final class RateLimitMiddlewareTest extends TestCase
         $router = new Router($app);
 
         $router->get('/api/posts', static fn (): Response => (new Response())->json(['ok' => true]))
-            ->middleware([
-                new HandleExceptionsMiddleware(new DefaultExceptionHandler()),
-                RateLimitMiddleware::using(1, 60, 'posts'),
-            ]);
+            ->middleware(RateLimitMiddleware::using(1, 60, 'posts'));
 
         $first = $router->dispatch(new Request(server: [
             'REQUEST_METHOD' => 'GET',
@@ -86,12 +84,13 @@ final class RateLimitMiddlewareTest extends TestCase
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_ACCEPT' => 'application/json',
         ]));
-        $second = $router->dispatch(new Request(server: [
+        $secondRequest = new Request(server: [
             'REQUEST_METHOD' => 'GET',
             'REQUEST_URI' => '/api/posts',
             'REMOTE_ADDR' => '127.0.0.1',
             'HTTP_ACCEPT' => 'application/json',
-        ]));
+        ]);
+        $second = $this->dispatchWithExceptionHandler($router, $secondRequest, new DefaultExceptionHandler());
 
         self::assertInstanceOf(Response::class, $first);
         self::assertSame(200, $first->statusCode());
@@ -104,5 +103,19 @@ final class RateLimitMiddlewareTest extends TestCase
             '{"error":{"type":"too_many_requests","message":"Too Many Requests.","status":429}}',
             $second->content(),
         );
+    }
+
+    private function dispatchWithExceptionHandler(
+        Router $router,
+        Request $request,
+        ExceptionHandlerInterface $handler,
+    ): mixed {
+        try {
+            return $router->dispatch($request);
+        } catch (Throwable $exception) {
+            $handler->report($exception);
+
+            return $handler->render($exception, $request);
+        }
     }
 }
