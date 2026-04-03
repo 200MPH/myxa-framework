@@ -298,6 +298,26 @@ final class Request
     }
 
     /**
+     * Determine whether the client expects a JSON response.
+     */
+    public function expectsJson(): bool
+    {
+        $accept = strtolower((string) $this->header('Accept', ''));
+        if (str_contains($accept, 'application/json') || str_contains($accept, '+json')) {
+            return true;
+        }
+
+        $contentType = strtolower((string) $this->header('Content-Type', ''));
+        if (str_contains($contentType, 'application/json') || str_contains($contentType, '+json')) {
+            return true;
+        }
+
+        return $this->ajax()
+            || $this->path === '/api'
+            || str_starts_with($this->path, '/api/');
+    }
+
+    /**
      * Return the client IP address when available.
      */
     public function ip(): ?string
