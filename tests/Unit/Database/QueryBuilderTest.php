@@ -6,11 +6,13 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use LogicException;
+use Myxa\Database\Query\JoinClause;
 use Myxa\Database\Query\QueryBuilder;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(QueryBuilder::class)]
+#[CoversClass(JoinClause::class)]
 final class QueryBuilderTest extends TestCase
 {
     public function testBuildsInsertSqlWithBindings(): void
@@ -86,6 +88,7 @@ final class QueryBuilderTest extends TestCase
         $builder = (new QueryBuilder())
             ->select('id', 'users.email', 'users.*')
             ->from('users', 'app_db')
+            ->leftJoin('profiles', 'profiles.user_id', '=', 'users.id')
             ->where('status', '=', 'active')
             ->whereBetween('created_at', '2026-01-01', '2026-12-31')
             ->whereIn('role', ['admin', 'editor'])
@@ -95,12 +98,14 @@ final class QueryBuilderTest extends TestCase
 
         self::assertSame(
             'SELECT `id`, `users`.`email`, `users`.* FROM `app_db`.`users`'
+            . ' LEFT JOIN `profiles` ON `profiles`.`user_id` = `users`.`id`'
             . ' WHERE `status` = ? AND `created_at` BETWEEN ? AND ? AND `role` IN (?, ?)'
             . ' GROUP BY `users`.`id` ORDER BY `created_at` DESC LIMIT 10 OFFSET 20',
             $builder->toSql(),
         );
         self::assertSame(
             'SELECT `id`, `users`.`email`, `users`.* FROM `app_db`.`users`'
+            . ' LEFT JOIN `profiles` ON `profiles`.`user_id` = `users`.`id`'
             . " WHERE `status` = 'active' AND `created_at` BETWEEN '2026-01-01' AND '2026-12-31' AND `role` IN ('admin', 'editor')"
             . ' GROUP BY `users`.`id` ORDER BY `created_at` DESC LIMIT 10 OFFSET 20',
             $builder->debugQuery(),
@@ -255,5 +260,63 @@ final class QueryBuilderTest extends TestCase
         (new QueryBuilder())
             ->from('users')
             ->update('users');
+    }
+
+    public function testJoinThrowsWhenUsedWithUpdateQuery(): void
+    {
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('JOIN can only be used with SELECT queries.');
+
+        (new QueryBuilder())
+            ->update('users')
+            ->join('profiles', 'profiles.user_id', '=', 'users.id');
+    }
+
+    public function testJoinSupportsAliasesAndMultipleOnConditionsViaClosure(): void
+    {
+        $builder = (new QueryBuilder())
+            ->select('u.id', 'p.user_id')
+            ->from('users as u')
+            ->join('profiles as p', static function (JoinClause $join): void {
+                $join->on('u.id', '=', 'p.user_id')
+                    ->on('p.status', '=', 'u.status');
+            })
+            ->where('u.status', '=', 'active');
+
+        self::assertSame(
+            'SELECT `u`.`id`, `p`.`user_id` FROM `users` AS `u`'
+            . ' INNER JOIN `profiles` AS `p` ON `u`.`id` = `p`.`user_id` AND `p`.`status` = `u`.`status`'
+            . ' WHERE `u`.`status` = ?',
+            $builder->toSql(),
+        );
+        self::assertSame(
+            "SELECT `u`.`id`, `p`.`user_id` FROM `users` AS `u`"
+            . " INNER JOIN `profiles` AS `p` ON `u`.`id` = `p`.`user_id` AND `p`.`status` = `u`.`status`"
+            . " WHERE `u`.`status` = 'active'",
+            $builder->debugQuery(),
+        );
+    }
+
+    public function testJoinClauseSupportsBoundValuesInsideOnConditions(): void
+    {
+        $builder = (new QueryBuilder())
+            ->select('u.id')
+            ->from('users as u')
+            ->join('profiles as p', static function (JoinClause $join): void {
+                $join->on('u.id', '=', 'p.user_id')
+                    ->where('p.status', '=', 5);
+            });
+
+        self::assertSame(
+            'SELECT `u`.`id` FROM `users` AS `u`'
+            . ' INNER JOIN `profiles` AS `p` ON `u`.`id` = `p`.`user_id` AND `p`.`status` = ?',
+            $builder->toSql(),
+        );
+        self::assertSame([5], $builder->getBindings());
+        self::assertSame(
+            'SELECT `u`.`id` FROM `users` AS `u`'
+            . ' INNER JOIN `profiles` AS `p` ON `u`.`id` = `p`.`user_id` AND `p`.`status` = 5',
+            $builder->debugQuery(),
+        );
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Database\Query;
 
+use Closure;
 use InvalidArgumentException;
 use LogicException;
 use SensitiveParameter;
@@ -63,6 +64,12 @@ final class QueryBuilder
 
     /** @var list<string> */
     private array $groupByColumns = [];
+
+    /** @var list<string> */
+    private array $joinClauses = [];
+
+    /** @var list<scalar|null> */
+    private array $joinBindings = [];
 
     private ?int $limitValue = null;
 
@@ -251,6 +258,16 @@ final class QueryBuilder
         return $this;
     }
 
+    public function join(string $table, Closure|string $first, ?string $operator = null, ?string $second = null): self
+    {
+        return $this->addJoin('INNER', $table, $first, $operator, $second);
+    }
+
+    public function leftJoin(string $table, Closure|string $first, ?string $operator = null, ?string $second = null): self
+    {
+        return $this->addJoin('LEFT', $table, $first, $operator, $second);
+    }
+
     public function limit(int $limit, int $offset = 0): self
     {
         $this->ensureStatementType(self::TYPE_SELECT, 'LIMIT can only be used with SELECT queries.');
@@ -298,6 +315,8 @@ final class QueryBuilder
         $this->updateBindings = [];
         $this->orderByColumns = [];
         $this->groupByColumns = [];
+        $this->joinClauses = [];
+        $this->joinBindings = [];
         $this->limitValue = null;
         $this->offsetValue = 0;
 
@@ -310,7 +329,8 @@ final class QueryBuilder
     public function getBindings(): array
     {
         return match ($this->statementType) {
-            self::TYPE_SELECT, self::TYPE_DELETE => $this->whereBindings,
+            self::TYPE_SELECT => array_values(array_merge($this->joinBindings, $this->whereBindings)),
+            self::TYPE_DELETE => $this->whereBindings,
             self::TYPE_INSERT => $this->insertBindings,
             self::TYPE_UPDATE => array_values(array_merge($this->updateBindings, $this->whereBindings)),
             default => [],
@@ -324,6 +344,10 @@ final class QueryBuilder
         }
 
         $sql = sprintf('SELECT %s FROM %s', $this->buildSelectColumns(), $this->table);
+
+        if ($this->joinClauses !== []) {
+            $sql .= ' ' . implode(' ', $this->joinClauses);
+        }
 
         if ($this->whereClauses !== []) {
             $sql .= sprintf(' WHERE %s', implode(' AND ', $this->whereClauses));
@@ -450,6 +474,16 @@ final class QueryBuilder
             }
         }
 
+        if (preg_match('/^(.+?)\s+as\s+([A-Za-z_][A-Za-z0-9_]*)$/i', $table, $matches) === 1) {
+            $baseTable = trim($matches[1]);
+            $alias = trim($matches[2]);
+            $qualified = $database !== null
+                ? sprintf('%s.%s', $this->quoteIdentifier($database), $this->quoteIdentifier($baseTable))
+                : $this->quoteIdentifier($baseTable);
+
+            return sprintf('%s AS %s', $qualified, $this->quoteIdentifier($alias));
+        }
+
         return $database !== null
             ? sprintf('%s.%s', $this->quoteIdentifier($database), $this->quoteIdentifier($table))
             : $this->quoteIdentifier($table);
@@ -502,8 +536,71 @@ final class QueryBuilder
             && $this->updateBindings === []
             && $this->orderByColumns === []
             && $this->groupByColumns === []
+            && $this->joinClauses === []
+            && $this->joinBindings === []
             && $this->limitValue === null
             && $this->offsetValue === 0;
+    }
+
+    private function addJoin(
+        string $type,
+        string $table,
+        Closure|string $first,
+        ?string $operator,
+        ?string $second,
+    ): self
+    {
+        $this->ensureStatementType(self::TYPE_SELECT, 'JOIN can only be used with SELECT queries.');
+
+        $this->joinClauses[] = sprintf(
+            '%s JOIN %s ON %s',
+            $type,
+            $this->qualifyTable($table),
+            $first instanceof Closure
+                ? $this->buildJoinClause($first)
+                : $this->buildJoinComparison($first, $operator, $second),
+        );
+
+        return $this;
+    }
+
+    private function buildJoinClause(Closure $callback): string
+    {
+        $join = new JoinClause(
+            $this->quoteIdentifier(...),
+            $this->normalizeComparisonOperator(...),
+            $this->normalizeBindingValue(...),
+        );
+
+        $callback($join);
+
+        $this->joinBindings = [...$this->joinBindings, ...$join->getBindings()];
+
+        return $join->toSql();
+    }
+
+    private function buildJoinComparison(string $first, ?string $operator, ?string $second): string
+    {
+        if ($operator === null || $second === null) {
+            throw new InvalidArgumentException('JOIN comparisons require first column, operator, and second column.');
+        }
+
+        return sprintf(
+            '%s %s %s',
+            $this->quoteIdentifier($first),
+            $this->normalizeComparisonOperator($operator),
+            $this->quoteIdentifier($second),
+        );
+    }
+
+    private function normalizeComparisonOperator(string $operator): string
+    {
+        $normalizedOperator = strtoupper(trim($operator));
+        if (!in_array($normalizedOperator, self::ALLOWED_OPERATORS, true)) {
+            throw new InvalidArgumentException(sprintf('Unsupported operator "%s".', $operator));
+        }
+
+        return $normalizedOperator;
     }
 
     private function quoteIdentifier(string $identifier): string

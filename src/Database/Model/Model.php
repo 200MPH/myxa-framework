@@ -31,6 +31,10 @@ abstract class Model implements JsonSerializable
     #[Internal]
     private array $attributes = [];
 
+    /** @var array<string, mixed> */
+    #[Internal]
+    private array $relations = [];
+
     #[Internal]
     private ?DatabaseManager $resolvedManager = null;
 
@@ -57,6 +61,7 @@ abstract class Model implements JsonSerializable
     public function __clone()
     {
         $this->exists = false;
+        $this->relations = [];
         $this->setAttribute(static::primaryKey(), null);
     }
 
@@ -274,6 +279,10 @@ abstract class Model implements JsonSerializable
             return $this->readDeclaredProperty($key);
         }
 
+        if (array_key_exists($key, $this->relations)) {
+            return $this->relations[$key];
+        }
+
         return $this->attributes[$key] ?? null;
     }
 
@@ -353,7 +362,37 @@ abstract class Model implements JsonSerializable
             unset($attributes[$key]);
         }
 
+        foreach ($this->relations as $name => $relation) {
+            $attributes[$name] = $this->serializeRelationValue($relation);
+        }
+
         return $attributes;
+    }
+
+    /**
+     * Determine whether a relation has already been loaded on the model.
+     */
+    public function relationLoaded(string $relation): bool
+    {
+        return array_key_exists($relation, $this->relations);
+    }
+
+    /**
+     * Return a previously loaded relation value.
+     */
+    public function getRelation(string $relation): mixed
+    {
+        return $this->relations[$relation] ?? null;
+    }
+
+    /**
+     * Store an already loaded relation value on the model instance.
+     */
+    public function setRelation(string $relation, mixed $value): static
+    {
+        $this->relations[$relation] = $value;
+
+        return $this;
     }
 
     /**
@@ -479,35 +518,53 @@ abstract class Model implements JsonSerializable
         return true;
     }
 
-    protected function hasOne(string $related, ?string $foreignKey = null, ?string $localKey = null): ModelQuery
+    protected function hasOne(string $related, ?string $foreignKey = null, ?string $localKey = null): Relation
     {
+        $this->assertRelatedModel($related);
         $localKey ??= static::primaryKey();
         $foreignKey ??= $this->guessForeignKey(static::class, $localKey);
 
-        return $this->relatedQuery($related)
-            ->where($foreignKey, '=', $this->getAttribute($localKey))
-            ->limit(1);
+        return new HasOneRelation(
+            $this,
+            $related,
+            $this->manager(),
+            $related::connectionName(),
+            $foreignKey,
+            $localKey,
+        );
     }
 
-    protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): ModelQuery
+    protected function hasMany(string $related, ?string $foreignKey = null, ?string $localKey = null): Relation
     {
+        $this->assertRelatedModel($related);
         $localKey ??= static::primaryKey();
         $foreignKey ??= $this->guessForeignKey(static::class, $localKey);
 
-        return $this->relatedQuery($related)
-            ->where($foreignKey, '=', $this->getAttribute($localKey));
+        return new HasManyRelation(
+            $this,
+            $related,
+            $this->manager(),
+            $related::connectionName(),
+            $foreignKey,
+            $localKey,
+        );
     }
 
-    protected function belongsTo(string $related, ?string $foreignKey = null, ?string $ownerKey = null): ModelQuery
+    protected function belongsTo(string $related, ?string $foreignKey = null, ?string $ownerKey = null): Relation
     {
         $this->assertRelatedModel($related);
 
         $ownerKey ??= $related::primaryKey();
         $foreignKey ??= $this->guessForeignKey($related, $ownerKey);
 
-        return $this->relatedQuery($related)
-            ->where($ownerKey, '=', $this->getAttribute($foreignKey))
-            ->limit(1);
+        return new BelongsToRelation(
+            $this,
+            $related,
+            $this->manager(),
+            $related::connectionName(),
+            $foreignKey,
+            $ownerKey,
+        );
     }
 
     protected static function newManager(): DatabaseManager
@@ -641,13 +698,6 @@ abstract class Model implements JsonSerializable
         }
     }
 
-    private function relatedQuery(string $related): ModelQuery
-    {
-        $this->assertRelatedModel($related);
-
-        return new ModelQuery($related, $this->manager());
-    }
-
     private function assertRelatedModel(string $related): void
     {
         if ($related !== self::class && !is_subclass_of($related, self::class)) {
@@ -727,6 +777,7 @@ abstract class Model implements JsonSerializable
     private function copyStateFrom(self $model): void
     {
         $this->attributes = $model->attributes;
+        $this->relations = $model->relations;
         $this->exists = $model->exists;
         $this->resolvedManager = $model->resolvedManager;
 
@@ -737,5 +788,18 @@ abstract class Model implements JsonSerializable
 
             $this->writeDeclaredProperty($name, $value);
         }
+    }
+
+    private function serializeRelationValue(mixed $value): mixed
+    {
+        if ($value instanceof self) {
+            return $value->toArray();
+        }
+
+        if (is_array($value)) {
+            return array_map(fn (mixed $item): mixed => $this->serializeRelationValue($item), $value);
+        }
+
+        return $value;
     }
 }

@@ -15,6 +15,7 @@ use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Database\Model\CastType;
 use Myxa\Database\Model\HasBlameable;
+use Myxa\Database\Model\HasManyRelation;
 use Myxa\Database\Model\HasTimestamps;
 use Myxa\Database\Model\Model;
 use Myxa\Database\Model\ModelNotFoundException;
@@ -135,6 +136,27 @@ final class Post extends Model
     public function user(): ModelQuery
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function comments(): ModelQuery
+    {
+        return $this->hasMany(Comment::class);
+    }
+}
+
+final class Comment extends Model
+{
+    use HasTimestamps;
+
+    protected string $table = 'comments';
+
+    protected ?int $post_id = null;
+
+    protected string $body = '';
+
+    public function post(): ModelQuery
+    {
+        return $this->belongsTo(Post::class);
     }
 }
 
@@ -512,6 +534,54 @@ final class ModelTest extends TestCase
         self::assertSame('First', $posts[0]->title);
         self::assertSame('relations@example.com', $profile->user()->firstOrFail()->email);
         self::assertSame('relations@example.com', $posts[0]->user()->firstOrFail()->email);
+        self::assertInstanceOf(HasManyRelation::class, $user->posts());
+    }
+
+    public function testQueryCanEagerLoadNestedRelations(): void
+    {
+        $firstUser = User::create(['email' => 'nested-a@example.com', 'status' => 'active']);
+        $secondUser = User::create(['email' => 'nested-b@example.com', 'status' => 'active']);
+        Profile::create(['user_id' => $firstUser->getKey(), 'bio' => 'Primary profile']);
+        $firstPost = Post::create(['user_id' => $firstUser->getKey(), 'title' => 'First post']);
+        $secondPost = Post::create(['user_id' => $firstUser->getKey(), 'title' => 'Second post']);
+        $thirdPost = Post::create(['user_id' => $secondUser->getKey(), 'title' => 'Third post']);
+        Comment::create(['post_id' => $firstPost->getKey(), 'body' => 'Comment one']);
+        Comment::create(['post_id' => $firstPost->getKey(), 'body' => 'Comment two']);
+        Comment::create(['post_id' => $thirdPost->getKey(), 'body' => 'Comment three']);
+
+        $users = User::query()
+            ->with('profile', 'posts.comments')
+            ->orderBy('id')
+            ->get();
+
+        self::assertCount(2, $users);
+        self::assertInstanceOf(Profile::class, $users[0]->getRelation('profile'));
+        self::assertSame('Primary profile', $users[0]->getRelation('profile')?->bio);
+        self::assertCount(2, $users[0]->getRelation('posts'));
+        self::assertCount(1, $users[1]->getRelation('posts'));
+        self::assertSame('Comment one', $users[0]->getRelation('posts')[0]->getRelation('comments')[0]->body);
+        self::assertSame('Comment three', $users[1]->getRelation('posts')[0]->getRelation('comments')[0]->body);
+
+        $payload = $users[0]->toArray();
+
+        self::assertArrayHasKey('profile', $payload);
+        self::assertArrayHasKey('posts', $payload);
+        self::assertSame('Primary profile', $payload['profile']['bio']);
+        self::assertSame('Comment two', $payload['posts'][0]['comments'][1]['body']);
+    }
+
+    public function testModelQuerySupportsJoins(): void
+    {
+        $user = User::create(['email' => 'join@example.com', 'status' => 'active']);
+        Profile::create(['user_id' => $user->getKey(), 'bio' => 'Joined']);
+
+        $users = User::query()
+            ->join('profiles', 'profiles.user_id', '=', 'users.id')
+            ->where('profiles.bio', '=', 'Joined')
+            ->get();
+
+        self::assertCount(1, $users);
+        self::assertSame('join@example.com', $users[0]->email);
     }
 
     public function testCustomPrimaryKeyConstantsSupportManualIdentifiers(): void
@@ -635,6 +705,15 @@ final class ModelTest extends TestCase
             . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             . 'user_id INTEGER NOT NULL, '
             . 'title TEXT NOT NULL, '
+            . 'created_at TEXT NULL, '
+            . 'updated_at TEXT NULL'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE comments ('
+            . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            . 'post_id INTEGER NOT NULL, '
+            . 'body TEXT NOT NULL, '
             . 'created_at TEXT NULL, '
             . 'updated_at TEXT NULL'
             . ')',
