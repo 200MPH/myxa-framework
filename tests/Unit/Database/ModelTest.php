@@ -18,7 +18,7 @@ use Myxa\Database\Model\HasBlameable;
 use Myxa\Database\Model\HasManyRelation;
 use Myxa\Database\Model\HasTimestamps;
 use Myxa\Database\Model\Model;
-use Myxa\Database\Model\ModelNotFoundException;
+use Myxa\Database\Model\Exceptions\ModelNotFoundException;
 use Myxa\Database\Model\ModelQuery;
 use PDO;
 use JsonException;

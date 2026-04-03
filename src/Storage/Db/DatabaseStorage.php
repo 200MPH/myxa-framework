@@ -9,7 +9,7 @@ use JsonException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Storage\AbstractStorage;
-use Myxa\Storage\StorageException;
+use Myxa\Storage\Exceptions\StorageException;
 use Myxa\Storage\StoredFile;
 
 final class DatabaseStorage extends AbstractStorage

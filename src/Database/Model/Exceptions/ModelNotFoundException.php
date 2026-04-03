@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database\Model;
+namespace Myxa\Database\Model\Exceptions;
 
+use Myxa\Database\Model\Model;
 use RuntimeException;
 
 final class ModelNotFoundException extends RuntimeException

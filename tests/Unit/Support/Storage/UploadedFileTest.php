@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Support\Storage;
 
 use Myxa\Storage\Local\LocalStorage;
-use Myxa\Storage\StorageException;
+use Myxa\Storage\Exceptions\StorageException;
 use Myxa\Storage\UploadedFile;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;

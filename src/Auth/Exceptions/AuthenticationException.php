@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Auth;
+namespace Myxa\Auth\Exceptions;
 
 use RuntimeException;
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Routing;
+namespace Myxa\Routing\Exceptions;
 
 use RuntimeException;
 

@@ -7,6 +7,7 @@ namespace Myxa\Database\Model;
 use Closure;
 use InvalidArgumentException;
 use Myxa\Database\DatabaseManager;
+use Myxa\Database\Model\Exceptions\ModelNotFoundException;
 use Myxa\Database\Query\QueryBuilder;
 
 /**

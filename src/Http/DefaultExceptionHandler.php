@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Myxa\Http;
 
-use Myxa\Auth\AuthenticationException;
+use Myxa\Auth\Exceptions\AuthenticationException;
 use Myxa\Logging\LogLevel;
 use Myxa\Logging\LoggerInterface;
 use Myxa\Logging\NullLogger;
-use Myxa\RateLimit\TooManyRequestsException;
-use Myxa\Routing\MethodNotAllowedException;
+use Myxa\RateLimit\Exceptions\TooManyRequestsException;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
 use Throwable;
 
 final class DefaultExceptionHandler implements ExceptionHandlerInterface

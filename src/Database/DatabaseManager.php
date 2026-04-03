@@ -8,6 +8,7 @@ use Closure;
 use InvalidArgumentException;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
+use Myxa\Database\Exceptions\DatabaseException;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Database\Query\RawExpression;
 use Myxa\Database\Query\SqlInterpolator;

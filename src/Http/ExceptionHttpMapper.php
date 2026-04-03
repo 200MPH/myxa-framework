@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Myxa\Http;
 
 use InvalidArgumentException;
-use Myxa\Auth\AuthenticationException;
-use Myxa\Database\Model\ModelNotFoundException;
-use Myxa\RateLimit\TooManyRequestsException;
-use Myxa\Routing\MethodNotAllowedException;
-use Myxa\Routing\RouteNotFoundException;
+use Myxa\Auth\Exceptions\AuthenticationException;
+use Myxa\Database\Model\Exceptions\ModelNotFoundException;
+use Myxa\RateLimit\Exceptions\TooManyRequestsException;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
+use Myxa\Routing\Exceptions\RouteNotFoundException;
 use Throwable;
 
 final class ExceptionHttpMapper

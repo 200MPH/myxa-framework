@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Container;
+namespace Myxa\Container\Exceptions;
 
 use Psr\Container\ContainerExceptionInterface;
 use RuntimeException;

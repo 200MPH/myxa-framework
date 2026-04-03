@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Myxa\Storage;
 
+use Myxa\Storage\Exceptions\StorageException;
+
 final class UploadedFile
 {
     private const int ERROR_EXTENSION_NOT_ALLOWED = 100;

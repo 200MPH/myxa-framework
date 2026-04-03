@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Myxa\RateLimit;
+namespace Myxa\RateLimit\Exceptions;
 
+use Myxa\RateLimit\RateLimitResult;
 use RuntimeException;
 
 /**

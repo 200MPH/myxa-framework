@@ -7,9 +7,9 @@ namespace Myxa\Middleware;
 use Closure;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
+use Myxa\RateLimit\Exceptions\TooManyRequestsException;
 use Myxa\RateLimit\RateLimiter;
 use Myxa\RateLimit\RateLimitResult;
-use Myxa\RateLimit\TooManyRequestsException;
 use Myxa\Routing\RouteDefinition;
 
 /**

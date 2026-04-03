@@ -6,7 +6,7 @@ namespace Myxa\Middleware;
 
 use Closure;
 use Myxa\Auth\AuthManager;
-use Myxa\Auth\AuthenticationException;
+use Myxa\Auth\Exceptions\AuthenticationException;
 use Myxa\Http\Request;
 use Myxa\Routing\RouteDefinition;
 

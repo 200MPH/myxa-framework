@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Myxa\Container;
 
 use Closure;
+use Myxa\Container\Exceptions\BindingResolutionException;
+use Myxa\Container\Exceptions\NotFoundException;
 use Psr\Container\ContainerInterface as PsrContainerInterface;
 
 /**

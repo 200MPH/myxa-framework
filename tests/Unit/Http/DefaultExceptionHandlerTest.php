@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Test\Unit\Http;
 
-use Myxa\Auth\AuthenticationException;
-use Myxa\Database\Model\ModelNotFoundException;
+use Myxa\Application;
+use Myxa\Auth\Exceptions\AuthenticationException;
+use Myxa\Database\Model\Exceptions\ModelNotFoundException;
 use Myxa\Http\DefaultExceptionHandler;
 use Myxa\Http\ExceptionHttpMapper;
 use Myxa\Http\ExceptionHandlerInterface;
@@ -13,11 +14,10 @@ use Myxa\Http\ExceptionHandlerServiceProvider;
 use Myxa\Http\Request;
 use Myxa\Http\Response;
 use Myxa\Logging\LoggerInterface;
+use Myxa\RateLimit\Exceptions\TooManyRequestsException;
 use Myxa\RateLimit\RateLimitResult;
-use Myxa\RateLimit\TooManyRequestsException;
-use Myxa\Routing\RouteNotFoundException;
-use Myxa\Routing\MethodNotAllowedException;
-use Myxa\Application;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
+use Myxa\Routing\Exceptions\RouteNotFoundException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 

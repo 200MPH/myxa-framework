@@ -6,11 +6,11 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use Myxa\Application;
-use Myxa\Database\DatabaseException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\DatabaseServiceProvider;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
+use Myxa\Database\Exceptions\DatabaseException;
 use Myxa\Database\Model\Model;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Database\Query\RawExpression;

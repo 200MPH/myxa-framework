@@ -8,10 +8,10 @@ use Myxa\Application;
 use Myxa\Http\Controller;
 use Myxa\Http\Request as HttpRequest;
 use Myxa\Middleware\MiddlewareInterface;
-use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteDefinition;
-use Myxa\Routing\RouteNotFoundException;
 use Myxa\Routing\Router;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
+use Myxa\Routing\Exceptions\RouteNotFoundException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 

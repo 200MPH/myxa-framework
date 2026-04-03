@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Database;
+namespace Myxa\Database\Exceptions;
 
 use PDOException;
 use RuntimeException;

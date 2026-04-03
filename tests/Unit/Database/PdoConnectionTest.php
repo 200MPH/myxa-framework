@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Test\Unit\Database;
 
-use Myxa\Database\DatabaseConnectionException;
 use Myxa\Database\Connection\ConnectionInterface;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Database\Connection\TransactionalConnectionInterface;
+use Myxa\Database\Exceptions\DatabaseConnectionException;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;

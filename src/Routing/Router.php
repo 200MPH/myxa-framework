@@ -9,6 +9,8 @@ use InvalidArgumentException;
 use Myxa\Container\Container;
 use Myxa\Http\Request;
 use Myxa\Middleware\MiddlewareInterface;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
+use Myxa\Routing\Exceptions\RouteNotFoundException;
 
 /**
  * Small in-memory router for registering and dispatching request handlers.

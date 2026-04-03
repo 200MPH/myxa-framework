@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Database\Connection;
 
-use Myxa\Database\DatabaseConnectionException;
+use Myxa\Database\Exceptions\DatabaseConnectionException;
 use PDO;
 use PDOException;
 use RuntimeException;

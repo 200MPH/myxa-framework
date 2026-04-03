@@ -8,7 +8,7 @@ use Myxa\Database\DatabaseManager;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Storage\Db\DatabaseStorage;
-use Myxa\Storage\StorageException;
+use Myxa\Storage\Exceptions\StorageException;
 use Myxa\Storage\StoredFile;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;

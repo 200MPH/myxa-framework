@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
-use Myxa\Database\DatabaseException;
+use Myxa\Database\Exceptions\DatabaseException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Query\QueryBuilder;

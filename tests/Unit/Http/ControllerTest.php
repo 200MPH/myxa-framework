@@ -8,8 +8,8 @@ use Myxa\Application;
 use Myxa\Container\Container;
 use Myxa\Http\Controller;
 use Myxa\Http\Request;
-use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteDefinition;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Myxa\Http;
 
 use Myxa\Container\Container;
-use Myxa\Routing\MethodNotAllowedException;
 use Myxa\Routing\RouteDefinition;
+use Myxa\Routing\Exceptions\MethodNotAllowedException;
 
 /**
  * Base HTTP controller that dispatches to an action based on the request method.

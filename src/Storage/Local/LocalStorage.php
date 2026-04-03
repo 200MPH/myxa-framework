@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Storage\Local;
 
 use Myxa\Storage\AbstractStorage;
-use Myxa\Storage\StorageException;
+use Myxa\Storage\Exceptions\StorageException;
 use Myxa\Storage\StoredFile;
 
 final class LocalStorage extends AbstractStorage
