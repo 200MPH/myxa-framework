@@ -47,7 +47,10 @@ final class DatabaseServiceProvider extends ServiceProvider
             return $manager;
         });
 
-        $this->app()->singleton('db', static fn (Application $app): DatabaseManager => $app->make(DatabaseManager::class));
+        $this->app()->singleton(
+            'db',
+            static fn (Application $app): DatabaseManager => $app->make(DatabaseManager::class),
+        );
     }
 
     /**

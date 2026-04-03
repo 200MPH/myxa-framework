@@ -40,8 +40,11 @@ final class AuthMiddleware implements MiddlewareInterface
             Request $request,
             Closure $next,
             RouteDefinition $route,
-            AuthManager $auth,
-        ) use ($guard, $redirectTo): mixed {
+            AuthManager $auth
+        ) use (
+            $guard,
+            $redirectTo,
+        ): mixed {
             return (new self($auth, $guard, $redirectTo))->handle($request, $next, $route);
         };
     }

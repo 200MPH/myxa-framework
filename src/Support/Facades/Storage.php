@@ -111,7 +111,12 @@ final class Storage
      * Persist an uploaded file using the selected storage driver.
      *
      * @param array|UploadedFile $file
-     * @param array{name?: string, mime_type?: string, metadata?: array<string, mixed>, allowed_extensions?: list<string>} $options
+     * @param array{
+     *     name?: string,
+     *     mime_type?: string,
+     *     metadata?: array<string, mixed>,
+     *     allowed_extensions?: list<string>
+     * } $options
      */
     public static function upload(
         array|UploadedFile $file,

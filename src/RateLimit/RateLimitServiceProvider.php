@@ -17,7 +17,9 @@ final class RateLimitServiceProvider extends ServiceProvider
         if (!$this->app()->has(RateLimiterStoreInterface::class)) {
             $this->app()->singleton(
                 RateLimiterStoreInterface::class,
-                static fn (): RateLimiterStoreInterface => new FileRateLimiterStore(sys_get_temp_dir() . '/myxa-rate-limit'),
+                static fn (): RateLimiterStoreInterface => new FileRateLimiterStore(
+                    sys_get_temp_dir() . '/myxa-rate-limit',
+                ),
             );
         }
 
@@ -25,6 +27,9 @@ final class RateLimitServiceProvider extends ServiceProvider
             RateLimiter::class,
             static fn (Application $app): RateLimiter => new RateLimiter($app->make(RateLimiterStoreInterface::class)),
         );
-        $this->app()->singleton('rate.limiter', static fn (Application $app): RateLimiter => $app->make(RateLimiter::class));
+        $this->app()->singleton(
+            'rate.limiter',
+            static fn (Application $app): RateLimiter => $app->make(RateLimiter::class),
+        );
     }
 }

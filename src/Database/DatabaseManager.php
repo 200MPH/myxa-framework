@@ -61,7 +61,9 @@ final class DatabaseManager
         }
 
         if ($connection instanceof PdoConnectionConfig) {
-            $this->connectionFactories[$alias] = static fn (self $manager): PdoConnection => new PdoConnection($connection);
+            $this->connectionFactories[$alias] = static fn (
+                self $manager,
+            ): PdoConnection => new PdoConnection($connection);
 
             return $this;
         }
@@ -191,15 +193,19 @@ final class DatabaseManager
     ): array {
         $resolvedConnection = $this->resolveConnectionName($connection);
 
-        return $this->runQuery($sql, $resolvedConnection, function () use ($sql, $bindings, $resolvedConnection): array {
-            $statement = $this->prepare($sql, $bindings, $resolvedConnection);
-            $statement->execute();
+        return $this->runQuery(
+            $sql,
+            $resolvedConnection,
+            function () use ($sql, $bindings, $resolvedConnection): array {
+                $statement = $this->prepare($sql, $bindings, $resolvedConnection);
+                $statement->execute();
 
-            /** @var list<array<string, mixed>> $result */
-            $result = $statement->fetchAll(PDO::FETCH_ASSOC);
+                /** @var list<array<string, mixed>> $result */
+                $result = $statement->fetchAll(PDO::FETCH_ASSOC);
 
-            return $result;
-        });
+                return $result;
+            },
+        );
     }
 
     /**
@@ -214,11 +220,15 @@ final class DatabaseManager
     ): bool {
         $resolvedConnection = $this->resolveConnectionName($connection);
 
-        return $this->runQuery($sql, $resolvedConnection, function () use ($sql, $bindings, $resolvedConnection): bool {
-            $statement = $this->prepare($sql, $bindings, $resolvedConnection);
+        return $this->runQuery(
+            $sql,
+            $resolvedConnection,
+            function () use ($sql, $bindings, $resolvedConnection): bool {
+                $statement = $this->prepare($sql, $bindings, $resolvedConnection);
 
-            return $statement->execute();
-        });
+                return $statement->execute();
+            },
+        );
     }
 
     /**
@@ -233,24 +243,28 @@ final class DatabaseManager
     ): string|int {
         $resolvedConnection = $this->resolveConnectionName($connection);
 
-        return $this->runQuery($sql, $resolvedConnection, function () use ($sql, $bindings, $resolvedConnection): string|int {
-            $statement = $this->prepare($sql, $bindings, $resolvedConnection);
-            $statement->execute();
+        return $this->runQuery(
+            $sql,
+            $resolvedConnection,
+            function () use ($sql, $bindings, $resolvedConnection): string|int {
+                $statement = $this->prepare($sql, $bindings, $resolvedConnection);
+                $statement->execute();
 
-            $lastInsertId = $this->pdo($resolvedConnection)->lastInsertId();
-            if ($lastInsertId === false) {
-                throw new RuntimeException('Unable to fetch last insert ID.');
-            }
-
-            if (ctype_digit($lastInsertId)) {
-                $asInt = (int) $lastInsertId;
-                if ((string) $asInt === $lastInsertId) {
-                    return $asInt;
+                $lastInsertId = $this->pdo($resolvedConnection)->lastInsertId();
+                if ($lastInsertId === false) {
+                    throw new RuntimeException('Unable to fetch last insert ID.');
                 }
-            }
 
-            return $lastInsertId;
-        });
+                if (ctype_digit($lastInsertId)) {
+                    $asInt = (int) $lastInsertId;
+                    if ((string) $asInt === $lastInsertId) {
+                        return $asInt;
+                    }
+                }
+
+                return $lastInsertId;
+            },
+        );
     }
 
     /**
@@ -410,7 +424,11 @@ final class DatabaseManager
         $connection = $factory($this);
 
         if (!$connection instanceof PdoConnection) {
-            throw new RuntimeException(sprintf('Connection factory for alias "%s" must return %s.', $alias, PdoConnection::class));
+            throw new RuntimeException(sprintf(
+                'Connection factory for alias "%s" must return %s.',
+                $alias,
+                PdoConnection::class,
+            ));
         }
 
         return $connection;

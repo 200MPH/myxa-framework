@@ -158,7 +158,10 @@ final class UploadedFile
             6 => 'Missing a temporary folder.',
             7 => 'Failed to write file to disk.',
             8 => 'A PHP extension stopped the file upload.',
-            self::ERROR_EXTENSION_NOT_ALLOWED => sprintf('File extension "%s" not allowed.', strtolower($this->extension())),
+            self::ERROR_EXTENSION_NOT_ALLOWED => sprintf(
+                'File extension "%s" not allowed.',
+                strtolower($this->extension()),
+            ),
             self::ERROR_INVALID_INPUT => 'File input is empty or $_FILES data is corrupted.',
             default => 'Unrecognized error',
         };

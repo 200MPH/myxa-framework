@@ -126,7 +126,12 @@ final class StorageManager
 
     /**
      * @param array|UploadedFile $file
-     * @param array{name?: string, mime_type?: string, metadata?: array<string, mixed>, allowed_extensions?: list<string>} $options
+     * @param array{
+     *     name?: string,
+     *     mime_type?: string,
+     *     metadata?: array<string, mixed>,
+     *     allowed_extensions?: list<string>
+     * } $options
      */
     public function upload(
         array|UploadedFile $file,

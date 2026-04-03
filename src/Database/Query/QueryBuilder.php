@@ -258,13 +258,21 @@ final class QueryBuilder
         return $this;
     }
 
-    public function join(string $table, Closure|string $first, ?string $operator = null, ?string $second = null): self
-    {
+    public function join(
+        string $table,
+        Closure|string $first,
+        ?string $operator = null,
+        ?string $second = null,
+    ): self {
         return $this->addJoin('INNER', $table, $first, $operator, $second);
     }
 
-    public function leftJoin(string $table, Closure|string $first, ?string $operator = null, ?string $second = null): self
-    {
+    public function leftJoin(
+        string $table,
+        Closure|string $first,
+        ?string $operator = null,
+        ?string $second = null,
+    ): self {
         return $this->addJoin('LEFT', $table, $first, $operator, $second);
     }
 
@@ -547,9 +555,8 @@ final class QueryBuilder
         string $table,
         Closure|string $first,
         ?string $operator,
-        ?string $second,
-    ): self
-    {
+        ?string $second
+    ): self {
         $this->ensureStatementType(self::TYPE_SELECT, 'JOIN can only be used with SELECT queries.');
 
         $this->joinClauses[] = sprintf(

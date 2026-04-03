@@ -15,6 +15,9 @@ final class LoggingServiceProvider extends ServiceProvider
             $this->app()->singleton(LoggerInterface::class, NullLogger::class);
         }
 
-        $this->app()->singleton('logger', static fn (Application $app): LoggerInterface => $app->make(LoggerInterface::class));
+        $this->app()->singleton(
+            'logger',
+            static fn (Application $app): LoggerInterface => $app->make(LoggerInterface::class),
+        );
     }
 }

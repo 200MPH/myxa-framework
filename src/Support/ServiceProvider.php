@@ -47,7 +47,10 @@ abstract class ServiceProvider
     final protected function app(): Application
     {
         if (!$this->app instanceof Application) {
-            throw new LogicException(sprintf('Service provider [%s] is not attached to an application.', static::class));
+            throw new LogicException(sprintf(
+                'Service provider [%s] is not attached to an application.',
+                static::class,
+            ));
         }
 
         return $this->app;

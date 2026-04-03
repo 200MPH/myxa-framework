@@ -55,8 +55,12 @@ final class RateLimitMiddleware implements MiddlewareInterface
             Request $request,
             Closure $next,
             RouteDefinition $route,
-            RateLimiter $limiter,
-        ) use ($maxAttempts, $decaySeconds, $prefix): mixed {
+            RateLimiter $limiter
+        ) use (
+            $maxAttempts,
+            $decaySeconds,
+            $prefix,
+        ): mixed {
             return (new self($limiter, $maxAttempts, $decaySeconds, $prefix))->handle($request, $next, $route);
         };
     }

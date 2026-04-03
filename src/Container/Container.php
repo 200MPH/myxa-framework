@@ -203,7 +203,10 @@ class Container implements ContainerInterface
     protected function buildClass(string $className, array $parameters = []): object
     {
         if (in_array($className, $this->buildStack, true)) {
-            throw new BindingResolutionException(sprintf('Circular dependency detected while resolving [%s].', $className));
+            throw new BindingResolutionException(sprintf(
+                'Circular dependency detected while resolving [%s].',
+                $className,
+            ));
         }
 
         try {

@@ -24,18 +24,27 @@ final class StorageServiceProvider extends ServiceProvider
         $storages = $this->storages;
         $defaultStorage = $this->defaultStorage;
 
-        $this->app()->singleton(StorageManager::class, static function () use ($storages, $defaultStorage): StorageManager {
-            $manager = new StorageManager($defaultStorage);
+        $this->app()->singleton(
+            StorageManager::class,
+            static function () use ($storages, $defaultStorage): StorageManager {
+                $manager = new StorageManager($defaultStorage);
 
-            foreach ($storages as $alias => $storage) {
-                $manager->addStorage($alias, $storage);
-            }
+                foreach ($storages as $alias => $storage) {
+                    $manager->addStorage($alias, $storage);
+                }
 
-            return $manager;
-        });
+                return $manager;
+            },
+        );
 
-        $this->app()->singleton('storage', static fn (Application $app): StorageManager => $app->make(StorageManager::class));
-        $this->app()->singleton('file', static fn (Application $app): StorageManager => $app->make(StorageManager::class));
+        $this->app()->singleton(
+            'storage',
+            static fn (Application $app): StorageManager => $app->make(StorageManager::class),
+        );
+        $this->app()->singleton(
+            'file',
+            static fn (Application $app): StorageManager => $app->make(StorageManager::class),
+        );
     }
 
     public function boot(): void

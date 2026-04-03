@@ -26,7 +26,12 @@ final class ModelValueCaster
 
         return match ($cast->type) {
             CastType::DateTime => $this->castToDateTime($name, $value, $cast->format, DateTime::class),
-            CastType::DateTimeImmutable => $this->castToDateTime($name, $value, $cast->format, DateTimeImmutable::class),
+            CastType::DateTimeImmutable => $this->castToDateTime(
+                $name,
+                $value,
+                $cast->format,
+                DateTimeImmutable::class,
+            ),
         };
     }
 
@@ -44,8 +49,12 @@ final class ModelValueCaster
     /**
      * @param class-string<DateTime|DateTimeImmutable> $dateTimeClass
      */
-    private function castToDateTime(string $name, mixed $value, ?string $format, string $dateTimeClass): DateTimeInterface
-    {
+    private function castToDateTime(
+        string $name,
+        mixed $value,
+        ?string $format,
+        string $dateTimeClass,
+    ): DateTimeInterface {
         if ($dateTimeClass === DateTimeImmutable::class && $value instanceof DateTimeImmutable) {
             return $value;
         }

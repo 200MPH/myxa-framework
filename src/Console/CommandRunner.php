@@ -173,7 +173,11 @@ final class CommandRunner
         }
 
         $output->output('');
-        $output->output(sprintf('Use `%s help <command>` or `%s <command> --help` for details.', $program, $program))->info();
+        $output->output(sprintf(
+            'Use `%s help <command>` or `%s <command> --help` for details.',
+            $program,
+            $program,
+        ))->info();
 
         return 0;
     }
@@ -425,7 +429,11 @@ final class CommandRunner
         $instance = $this->container->make($command);
 
         if (!$instance instanceof CommandInterface) {
-            throw new InvalidArgumentException(sprintf('Console command [%s] must implement %s.', $command, CommandInterface::class));
+            throw new InvalidArgumentException(sprintf(
+                'Console command [%s] must implement %s.',
+                $command,
+                CommandInterface::class,
+            ));
         }
 
         return $instance;

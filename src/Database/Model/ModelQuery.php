@@ -87,8 +87,12 @@ class ModelQuery
         return $this;
     }
 
-    public function leftJoin(string $table, Closure|string $first, ?string $operator = null, ?string $second = null): self
-    {
+    public function leftJoin(
+        string $table,
+        Closure|string $first,
+        ?string $operator = null,
+        ?string $second = null,
+    ): self {
         $this->query->leftJoin($table, $first, $operator, $second);
 
         return $this;

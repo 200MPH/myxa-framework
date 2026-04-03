@@ -44,7 +44,11 @@ class Application extends Container
     {
         if (is_string($provider)) {
             if (!is_subclass_of($provider, ServiceProvider::class)) {
-                throw new InvalidArgumentException(sprintf('Provider [%s] must extend %s.', $provider, ServiceProvider::class));
+                throw new InvalidArgumentException(sprintf(
+                    'Provider [%s] must extend %s.',
+                    $provider,
+                    ServiceProvider::class,
+                ));
             }
 
             $provider = new $provider();
