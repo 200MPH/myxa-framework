@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Support\Storage;
+namespace Myxa\Storage;
 
 use Closure;
 use InvalidArgumentException;
@@ -17,17 +17,12 @@ final class StorageManager
     /** @var array<string, Closure(self): StorageInterface> */
     private array $storageFactories = [];
 
-    /**
-     * @param string $defaultStorage Default storage alias for manager operations.
-     */
     public function __construct(private string $defaultStorage = 'local')
     {
         $this->defaultStorage = $this->normalizeStorageName($this->defaultStorage);
     }
 
     /**
-     * Register a storage driver or factory under an alias.
-     *
      * @param StorageInterface|callable(self): StorageInterface|callable(): StorageInterface $storage
      */
     public function addStorage(string $alias, StorageInterface|callable $storage, bool $replace = false): self
@@ -51,9 +46,6 @@ final class StorageManager
         return $this;
     }
 
-    /**
-     * Determine whether a storage alias is registered.
-     */
     public function hasStorage(string $alias): bool
     {
         $alias = $this->normalizeStorageName($alias);
@@ -61,9 +53,6 @@ final class StorageManager
         return isset($this->storages[$alias]) || isset($this->storageFactories[$alias]);
     }
 
-    /**
-     * Resolve a storage driver by alias.
-     */
     public function storage(?string $alias = null): StorageInterface
     {
         $resolvedAlias = $this->resolveStorageName($alias);
@@ -91,17 +80,11 @@ final class StorageManager
         throw new RuntimeException(sprintf('Storage alias "%s" is not registered.', $resolvedAlias));
     }
 
-    /**
-     * Return the current default storage alias.
-     */
     public function getDefaultStorage(): string
     {
         return $this->defaultStorage;
     }
 
-    /**
-     * Change the default storage alias.
-     */
     public function setDefaultStorage(string $alias): self
     {
         $this->defaultStorage = $this->normalizeStorageName($alias);
@@ -110,8 +93,6 @@ final class StorageManager
     }
 
     /**
-     * Persist raw contents to a storage driver.
-     *
      * @param array{name?: string, mime_type?: string, metadata?: array<string, mixed>} $options
      */
     public function put(
@@ -123,41 +104,27 @@ final class StorageManager
         return $this->storage($storage)->put($location, $contents, $options);
     }
 
-    /**
-     * Return file metadata when a location exists.
-     */
     public function get(string $location, ?string $storage = null): ?StoredFile
     {
         return $this->storage($storage)->get($location);
     }
 
-    /**
-     * Read raw contents from a storage location.
-     */
     public function read(string $location, ?string $storage = null): string
     {
         return $this->storage($storage)->read($location);
     }
 
-    /**
-     * Delete a file from storage.
-     */
     public function delete(string $location, ?string $storage = null): bool
     {
         return $this->storage($storage)->delete($location);
     }
 
-    /**
-     * Determine whether a file exists in storage.
-     */
     public function exists(string $location, ?string $storage = null): bool
     {
         return $this->storage($storage)->exists($location);
     }
 
     /**
-     * Persist an uploaded file using the selected storage driver.
-     *
      * @param array|UploadedFile $file
      * @param array{name?: string, mime_type?: string, metadata?: array<string, mixed>, allowed_extensions?: list<string>} $options
      */

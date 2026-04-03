@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
-use Myxa\Support\Storage\StorageInterface;
-use Myxa\Support\Storage\StorageManager;
-use Myxa\Support\Storage\StoredFile;
-use Myxa\Support\Storage\UploadedFile;
+use Myxa\Storage\StorageInterface;
+use Myxa\Storage\StorageManager;
+use Myxa\Storage\StoredFile;
+use Myxa\Storage\UploadedFile;
 
 /**
  * Small static storage facade inspired by the DB helper.

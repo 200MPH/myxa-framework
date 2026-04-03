@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Support\Storage\Local;
+namespace Myxa\Storage\Local;
 
-use Myxa\Support\Storage\AbstractStorage;
-use Myxa\Support\Storage\StorageException;
-use Myxa\Support\Storage\StoredFile;
+use Myxa\Storage\AbstractStorage;
+use Myxa\Storage\StorageException;
+use Myxa\Storage\StoredFile;
 
 final class LocalStorage extends AbstractStorage
 {

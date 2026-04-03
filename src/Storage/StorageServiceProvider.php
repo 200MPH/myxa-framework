@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Support\Storage;
+namespace Myxa\Storage;
 
 use Myxa\Application;
 use Myxa\Support\Facades\Storage as StorageFacade;
@@ -19,9 +19,6 @@ final class StorageServiceProvider extends ServiceProvider
     ) {
     }
 
-    /**
-     * Register the storage manager and container alias.
-     */
     public function register(): void
     {
         $storages = $this->storages;
@@ -41,9 +38,6 @@ final class StorageServiceProvider extends ServiceProvider
         $this->app()->singleton('file', static fn (Application $app): StorageManager => $app->make(StorageManager::class));
     }
 
-    /**
-     * Point the static facade at the application's storage manager.
-     */
     public function boot(): void
     {
         StorageFacade::setManager($this->app()->make(StorageManager::class));

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Test\Unit\Support\Storage;
 
 use InvalidArgumentException;
-use Myxa\Support\Storage\Local\LocalStorage;
-use Myxa\Support\Storage\StoredFile;
+use Myxa\Storage\Local\LocalStorage;
+use Myxa\Storage\StoredFile;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 

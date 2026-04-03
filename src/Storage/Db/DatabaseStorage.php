@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Support\Storage\Db;
+namespace Myxa\Storage\Db;
 
 use InvalidArgumentException;
 use JsonException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Query\QueryBuilder;
-use Myxa\Support\Storage\AbstractStorage;
-use Myxa\Support\Storage\StorageException;
-use Myxa\Support\Storage\StoredFile;
+use Myxa\Storage\AbstractStorage;
+use Myxa\Storage\StorageException;
+use Myxa\Storage\StoredFile;
 
 final class DatabaseStorage extends AbstractStorage
 {

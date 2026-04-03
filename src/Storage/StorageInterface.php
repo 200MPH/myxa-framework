@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Myxa\Support\Storage;
+namespace Myxa\Storage;
 
 interface StorageInterface
 {
