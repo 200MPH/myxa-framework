@@ -32,7 +32,7 @@ class ModelQuery
         private readonly DatabaseManager $manager,
         private readonly ?string $connection = null,
     ) {
-        $this->query = (new QueryBuilder())->from($this->modelClass::table());
+        $this->query = $this->manager->query($this->connection)->from($this->modelClass::table());
     }
 
     public function select(string ...$columns): self

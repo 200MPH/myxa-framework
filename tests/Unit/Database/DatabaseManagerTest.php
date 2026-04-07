@@ -126,6 +126,7 @@ final class DatabaseManagerTest extends TestCase
 
         self::assertSame(self::CONNECTION_ALIAS, $manager->getDefaultConnection());
         self::assertInstanceOf(QueryBuilder::class, $manager->query());
+        self::assertSame('SELECT * FROM "users"', $manager->query()->from('users')->toSql());
 
         $raw = $manager->raw('NOW()');
 

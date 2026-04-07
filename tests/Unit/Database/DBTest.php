@@ -158,6 +158,7 @@ final class DBTest extends TestCase
     public function testQueryReturnsQueryBuilderInstance(): void
     {
         self::assertInstanceOf(QueryBuilder::class, DB::query());
+        self::assertSame('SELECT * FROM "users"', DB::query(self::CONNECTION_ALIAS)->from('users')->toSql());
     }
 
     public function testToRawSqlInterpolatesPositionalBindings(): void

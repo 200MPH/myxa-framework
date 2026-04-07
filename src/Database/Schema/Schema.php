@@ -10,6 +10,7 @@ use Myxa\Database\Migrations\Migration;
 use Myxa\Database\Schema\Grammar\MysqlSchemaGrammar;
 use Myxa\Database\Schema\Grammar\PostgresSchemaGrammar;
 use Myxa\Database\Schema\Grammar\SchemaGrammarInterface;
+use Myxa\Database\Schema\Grammar\SqlServerSchemaGrammar;
 use Myxa\Database\Schema\Grammar\SqliteSchemaGrammar;
 use Myxa\Database\Schema\ReverseEngineering\ReverseEngineer;
 use PDO;
@@ -179,6 +180,7 @@ final class Schema
         $this->resolvedGrammar = match ($driver) {
             'pgsql' => new PostgresSchemaGrammar(),
             'sqlite' => new SqliteSchemaGrammar(),
+            'sqlsrv' => new SqlServerSchemaGrammar(),
             default => new MysqlSchemaGrammar(),
         };
 

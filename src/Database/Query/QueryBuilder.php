@@ -7,6 +7,8 @@ namespace Myxa\Database\Query;
 use Closure;
 use InvalidArgumentException;
 use LogicException;
+use Myxa\Database\Query\Grammar\MysqlQueryGrammar;
+use Myxa\Database\Query\Grammar\QueryGrammarInterface;
 use SensitiveParameter;
 
 /**
@@ -74,6 +76,11 @@ final class QueryBuilder
     private ?int $limitValue = null;
 
     private int $offsetValue = 0;
+
+    public function __construct(
+        private readonly QueryGrammarInterface $grammar = new MysqlQueryGrammar(),
+    ) {
+    }
 
     public function select(string ...$columns): self
     {
@@ -351,7 +358,14 @@ final class QueryBuilder
             throw new LogicException('FROM table is required before generating SQL.');
         }
 
-        $sql = sprintf('SELECT %s FROM %s', $this->buildSelectColumns(), $this->table);
+        [$columns, $paginationSuffix, $fallbackOrderBy] = $this->grammar->compileSelectPagination(
+            $this->buildSelectColumns(),
+            $this->limitValue,
+            $this->offsetValue,
+            $this->orderByColumns !== [],
+        );
+
+        $sql = sprintf('SELECT %s FROM %s', $columns, $this->table);
 
         if ($this->joinClauses !== []) {
             $sql .= ' ' . implode(' ', $this->joinClauses);
@@ -367,13 +381,12 @@ final class QueryBuilder
 
         if ($this->orderByColumns !== []) {
             $sql .= sprintf(' ORDER BY %s', implode(', ', $this->orderByColumns));
+        } elseif ($fallbackOrderBy !== null) {
+            $sql .= sprintf(' ORDER BY %s', $fallbackOrderBy);
         }
 
-        if ($this->limitValue !== null) {
-            $sql .= sprintf(' LIMIT %d', $this->limitValue);
-            if ($this->offsetValue > 0) {
-                $sql .= sprintf(' OFFSET %d', $this->offsetValue);
-            }
+        if ($paginationSuffix !== '') {
+            $sql .= ' ' . $paginationSuffix;
         }
 
         return $sql;
@@ -431,11 +444,12 @@ final class QueryBuilder
         return $sql;
     }
 
-    private function buildSelectColumns(): string
+    /**
+     * @return list<string>
+     */
+    private function buildSelectColumns(): array
     {
-        $columns = array_map($this->normalizeSelectColumn(...), $this->selectColumns);
-
-        return implode(', ', $columns);
+        return array_values(array_map($this->normalizeSelectColumn(...), $this->selectColumns));
     }
 
     private function normalizeSelectColumn(string $column): string
@@ -612,28 +626,6 @@ final class QueryBuilder
 
     private function quoteIdentifier(string $identifier): string
     {
-        $identifier = trim($identifier);
-        if ($identifier === '') {
-            throw new InvalidArgumentException('Identifier cannot be empty.');
-        }
-
-        if (str_contains($identifier, '`')) {
-            throw new InvalidArgumentException('Identifier cannot contain backticks.');
-        }
-
-        $parts = explode('.', $identifier);
-        $quotedParts = array_map(
-            static function (string $part): string {
-                $part = trim($part);
-                if ($part === '') {
-                    throw new InvalidArgumentException('Identifier contains an empty segment.');
-                }
-
-                return sprintf('`%s`', $part);
-            },
-            $parts,
-        );
-
-        return implode('.', $quotedParts);
+        return $this->grammar->quoteIdentifier($identifier);
     }
 }

@@ -6,6 +6,11 @@ namespace Test\Unit\Database;
 
 use InvalidArgumentException;
 use LogicException;
+use Myxa\Database\Query\Grammar\AbstractQueryGrammar;
+use Myxa\Database\Query\Grammar\MysqlQueryGrammar;
+use Myxa\Database\Query\Grammar\PostgresQueryGrammar;
+use Myxa\Database\Query\Grammar\SqliteQueryGrammar;
+use Myxa\Database\Query\Grammar\SqlServerQueryGrammar;
 use Myxa\Database\Query\JoinClause;
 use Myxa\Database\Query\QueryBuilder;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -13,6 +18,11 @@ use PHPUnit\Framework\TestCase;
 
 #[CoversClass(QueryBuilder::class)]
 #[CoversClass(JoinClause::class)]
+#[CoversClass(AbstractQueryGrammar::class)]
+#[CoversClass(MysqlQueryGrammar::class)]
+#[CoversClass(PostgresQueryGrammar::class)]
+#[CoversClass(SqliteQueryGrammar::class)]
+#[CoversClass(SqlServerQueryGrammar::class)]
 final class QueryBuilderTest extends TestCase
 {
     public function testBuildsInsertSqlWithBindings(): void
@@ -318,5 +328,86 @@ final class QueryBuilderTest extends TestCase
             . ' INNER JOIN `profiles` AS `p` ON `u`.`id` = `p`.`user_id` AND `p`.`status` = 5',
             $builder->debugQuery(),
         );
+    }
+
+    public function testPostgresGrammarBuildsDialectAwareSql(): void
+    {
+        $builder = (new QueryBuilder(new PostgresQueryGrammar()))
+            ->select('users.id', 'users.*')
+            ->from('users as u', 'app_db')
+            ->join('profiles as p', 'p.user_id', '=', 'u.id')
+            ->where('u.status', '=', 'active')
+            ->limit(5, 10);
+
+        self::assertSame(
+            'SELECT "users"."id", "users".* FROM "app_db"."users" AS "u"'
+            . ' INNER JOIN "profiles" AS "p" ON "p"."user_id" = "u"."id"'
+            . ' WHERE "u"."status" = ? LIMIT 5 OFFSET 10',
+            $builder->toSql(),
+        );
+    }
+
+    public function testSqliteGrammarBuildsDialectAwareSql(): void
+    {
+        $builder = (new QueryBuilder(new SqliteQueryGrammar()))
+            ->update('users')
+            ->set('status', 'archived')
+            ->where('users.id', '=', 5);
+
+        self::assertSame(
+            'UPDATE "users" SET "status" = ? WHERE "users"."id" = ?',
+            $builder->toSql(),
+        );
+    }
+
+    public function testDialectGrammarValidationMessagesStayHelpful(): void
+    {
+        try {
+            (new QueryBuilder(new PostgresQueryGrammar()))->from('bad"name')->toSql();
+            self::fail('Expected invalid PostgreSQL identifier exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Identifier cannot contain double quotes.', $exception->getMessage());
+        }
+
+        try {
+            (new QueryBuilder(new MysqlQueryGrammar()))->from('bad`name')->toSql();
+            self::fail('Expected invalid MySQL identifier exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Identifier cannot contain backticks.', $exception->getMessage());
+        }
+    }
+
+    public function testSqlServerGrammarBuildsDialectAwareSql(): void
+    {
+        $topBuilder = (new QueryBuilder(new SqlServerQueryGrammar()))
+            ->select('users.id')
+            ->from('users')
+            ->limit(3);
+
+        self::assertSame(
+            'SELECT TOP 3 [users].[id] FROM [users]',
+            $topBuilder->toSql(),
+        );
+
+        $pagedBuilder = (new QueryBuilder(new SqlServerQueryGrammar()))
+            ->select('u.id', 'u.email')
+            ->from('users as u')
+            ->where('u.status', '=', 'active')
+            ->limit(5, 10);
+
+        self::assertSame(
+            'SELECT [u].[id], [u].[email] FROM [users] AS [u] WHERE [u].[status] = ? ORDER BY (SELECT 0) OFFSET 10 ROWS FETCH NEXT 5 ROWS ONLY',
+            $pagedBuilder->toSql(),
+        );
+    }
+
+    public function testSqlServerGrammarValidationMessageIsHelpful(): void
+    {
+        try {
+            (new QueryBuilder(new SqlServerQueryGrammar()))->from('bad[name')->toSql();
+            self::fail('Expected invalid SQL Server identifier exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Identifier cannot contain square brackets.', $exception->getMessage());
+        }
     }
 }

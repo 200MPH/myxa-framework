@@ -45,9 +45,9 @@ final class DB
         return self::getManager()->pdo($alias);
     }
 
-    public static function query(): QueryBuilder
+    public static function query(?string $connection = null): QueryBuilder
     {
-        return self::getManager()->query();
+        return self::getManager()->query($connection);
     }
 
     /**

@@ -19,6 +19,7 @@ use Myxa\Database\Schema\ForeignKeyDefinition;
 use Myxa\Database\Schema\Grammar\AbstractSchemaGrammar;
 use Myxa\Database\Schema\Grammar\MysqlSchemaGrammar;
 use Myxa\Database\Schema\Grammar\PostgresSchemaGrammar;
+use Myxa\Database\Schema\Grammar\SqlServerSchemaGrammar;
 use Myxa\Database\Schema\Grammar\SqliteSchemaGrammar;
 use Myxa\Database\Schema\IndexDefinition;
 use Myxa\Database\Schema\ReverseEngineering\ColumnSchema;
@@ -107,6 +108,7 @@ final class ExposedSchemaInspector extends AbstractSchemaInspector
 #[CoversClass(AbstractSchemaGrammar::class)]
 #[CoversClass(MysqlSchemaGrammar::class)]
 #[CoversClass(PostgresSchemaGrammar::class)]
+#[CoversClass(SqlServerSchemaGrammar::class)]
 #[CoversClass(SqliteSchemaGrammar::class)]
 #[CoversClass(ColumnSchema::class)]
 #[CoversClass(ReverseForeignKeySchema::class)]
@@ -844,6 +846,61 @@ final class SchemaTest extends TestCase
         } catch (LogicException $exception) {
             self::assertStringContainsString('cannot add foreign keys', $exception->getMessage());
         }
+    }
+
+    public function testSqlServerGrammarCompilesCreateAlterAndUtilityStatements(): void
+    {
+        $create = Blueprint::create('posts');
+        $create->id();
+        $create->bigInteger('user_id');
+        $create->string('title')->unique();
+        $create->json('meta')->nullable();
+        $create->timestamp('published_at')->nullable()->useCurrent();
+        $create->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
+
+        $alter = Blueprint::table('posts');
+        $alter->string('slug', 120)->nullable()->unique();
+        $alter->renameColumn('title', 'headline');
+        $alter->dropColumn('legacy_code');
+        $alter->raw('UPDATE STATISTICS [posts]');
+
+        $grammar = new SqlServerSchemaGrammar();
+
+        self::assertSame(
+            [
+                'CREATE TABLE [posts] ([id] BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY, [user_id] BIGINT NOT NULL, [title] NVARCHAR(255) NOT NULL, [meta] NVARCHAR(MAX) NULL, [published_at] DATETIME2 NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT [posts_user_id_foreign] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) ON DELETE CASCADE)',
+                'CREATE UNIQUE INDEX [posts_title_unique] ON [posts] ([title])',
+            ],
+            $grammar->compileCreate($create),
+        );
+
+        self::assertSame(
+            [
+                'ALTER TABLE [posts] ADD COLUMN [slug] NVARCHAR(120) NULL',
+                "EXEC sp_rename N'posts.title', N'headline', N'COLUMN'",
+                'ALTER TABLE [posts] DROP COLUMN [legacy_code]',
+                'CREATE UNIQUE INDEX [posts_slug_unique] ON [posts] ([slug])',
+                'UPDATE STATISTICS [posts]',
+            ],
+            $grammar->compileAlter($alter),
+        );
+
+        self::assertSame(
+            "IF OBJECT_ID(N'posts', N'U') IS NOT NULL DROP TABLE [posts]",
+            $grammar->compileDrop('posts', true),
+        );
+        self::assertSame(
+            "EXEC sp_rename N'posts', N'archived_posts'",
+            $grammar->compileRename('posts', 'archived_posts'),
+        );
+        self::assertSame(
+            'DROP INDEX [posts_title_unique] ON [posts]',
+            $grammar->compileDropIndex('posts', 'posts_title_unique'),
+        );
+        self::assertSame(
+            'ALTER TABLE [posts] DROP CONSTRAINT [posts_user_id_foreign]',
+            $grammar->compileDropForeign('posts', 'posts_user_id_foreign'),
+        );
     }
 
     public function testSchemaInspectorHelpersNormalizeTypesDefaultsAndErrors(): void

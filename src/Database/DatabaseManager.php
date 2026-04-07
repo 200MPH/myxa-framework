@@ -9,6 +9,11 @@ use InvalidArgumentException;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Database\Exceptions\DatabaseException;
+use Myxa\Database\Query\Grammar\MysqlQueryGrammar;
+use Myxa\Database\Query\Grammar\PostgresQueryGrammar;
+use Myxa\Database\Query\Grammar\QueryGrammarInterface;
+use Myxa\Database\Query\Grammar\SqlServerQueryGrammar;
+use Myxa\Database\Query\Grammar\SqliteQueryGrammar;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Database\Query\RawExpression;
 use Myxa\Database\Query\SqlInterpolator;
@@ -110,9 +115,15 @@ final class DatabaseManager
         return $this->connection($alias)->getPdo();
     }
 
-    public function query(): QueryBuilder
+    public function query(?string $connection = null): QueryBuilder
     {
-        return new QueryBuilder();
+        $resolvedConnection = $connection !== null ? $this->normalizeConnectionName($connection) : $this->getDefaultConnection();
+
+        if (!$this->hasConnection($resolvedConnection)) {
+            return new QueryBuilder();
+        }
+
+        return new QueryBuilder($this->queryGrammar($resolvedConnection));
     }
 
     /**
@@ -465,5 +476,17 @@ final class DatabaseManager
         }
 
         return static fn (self $manager): PdoConnection => $factory($manager);
+    }
+
+    private function queryGrammar(?string $connection = null): QueryGrammarInterface
+    {
+        $driver = strtolower((string) $this->pdo($connection)->getAttribute(PDO::ATTR_DRIVER_NAME));
+
+        return match ($driver) {
+            'pgsql' => new PostgresQueryGrammar(),
+            'sqlite' => new SqliteQueryGrammar(),
+            'sqlsrv' => new SqlServerQueryGrammar(),
+            default => new MysqlQueryGrammar(),
+        };
     }
 }
