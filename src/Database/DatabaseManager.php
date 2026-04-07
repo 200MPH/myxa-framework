@@ -12,6 +12,7 @@ use Myxa\Database\Exceptions\DatabaseException;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Database\Query\RawExpression;
 use Myxa\Database\Query\SqlInterpolator;
+use Myxa\Database\Schema\Schema;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -112,6 +113,14 @@ final class DatabaseManager
     public function query(): QueryBuilder
     {
         return new QueryBuilder();
+    }
+
+    /**
+     * Start a fluent schema builder for the given connection.
+     */
+    public function schema(?string $connection = null): Schema
+    {
+        return new Schema($this, $connection);
     }
 
     public function raw(string $expression): RawExpression

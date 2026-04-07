@@ -6,6 +6,7 @@ Inspired by nature. Built for developers. Powered by AI
 ## Docker Setup
 
 The repository includes a PHP 8.4 CLI container and a MySQL container.
+It also includes a PostgreSQL container for execution-level database tests.
 
 ### Install Composer dependencies
 
@@ -45,16 +46,22 @@ docker compose up -d
 ```bash
 docker exec -it myxa-php-cli /bin/bash
 docker exec -it myxa-mysql /bin/bash
+docker exec -it myxa-postgres /bin/bash
 ```
 
 MySQL credentials are loaded from:
 - `./docker/mysql/.env`
 
+PostgreSQL credentials are loaded from:
+- `./docker/postgres/.env`
+
 Default host in Docker network:
 - `mysql`
+- `postgres`
 
 Default exposed host port:
 - `3306`
+- `5432`
 
 On Linux/macOS, build the PHP image with your local UID/GID:
 

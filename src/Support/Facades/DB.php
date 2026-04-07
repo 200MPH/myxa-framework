@@ -9,6 +9,7 @@ use Myxa\Database\DatabaseManager;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Query\QueryBuilder;
 use Myxa\Database\Query\RawExpression;
+use Myxa\Database\Schema\Schema;
 use PDO;
 use SensitiveParameter;
 
@@ -47,6 +48,14 @@ final class DB
     public static function query(): QueryBuilder
     {
         return self::getManager()->query();
+    }
+
+    /**
+     * Start a fluent schema builder for the given connection.
+     */
+    public static function schema(?string $connection = null): Schema
+    {
+        return self::getManager()->schema($connection);
     }
 
     public static function raw(string $expression): RawExpression

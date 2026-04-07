@@ -8,12 +8,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
         unzip \
+        libpq-dev \
         libonig-dev \
         libzip-dev \
         $PHPIZE_DEPS \
     && docker-php-ext-install -j"$(nproc)" \
         mbstring \
         pdo_mysql \
+        pdo_pgsql \
         zip \
     && pecl install pcov \
     && docker-php-ext-enable pcov \
