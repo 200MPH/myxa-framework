@@ -74,7 +74,6 @@ final class InvalidHandler
 
 #[CoversClass(EventBus::class)]
 #[CoversClass(AbstractEvent::class)]
-#[CoversClass(EventInterface::class)]
 #[CoversClass(EventListenerRegistry::class)]
 #[CoversClass(EventServiceProvider::class)]
 #[CoversClass(Event::class)]

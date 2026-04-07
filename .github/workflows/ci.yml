@@ -84,6 +84,12 @@ jobs:
       - name: Prepare build directories
         run: mkdir -p build/logs
 
+      - name: Run PHPStan
+        run: composer phpstan
+
+      - name: Run PHPCS
+        run: composer phpcs
+
       - name: Run full test suite with coverage
         run: composer test:ci:coverage
 
