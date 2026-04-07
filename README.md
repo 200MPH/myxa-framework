@@ -3,6 +3,27 @@
 Ultra-light, modern PHP framework built for speed, clarity, and extensibility.
 Inspired by nature. Built for developers. Powered by AI
 
+## Feature Docs
+
+Focused package documentation lives next to the relevant source folders:
+
+- [Auth](./src/Auth/README.md)
+- [Container](./src/Container/README.md)
+- [Console](./src/Console/README.md)
+- [Database Overview](./src/Database/README.md)
+- [Migrations](./src/Database/Migrations/README.md)
+- [Schema Builder and Reverse Engineering](./src/Database/Schema/README.md)
+- [Query Builder](./src/Database/Query/README.md)
+- [Models](./src/Database/Model/README.md)
+- [Events](./src/Events/README.md)
+- [HTTP](./src/Http/README.md)
+- [Logging](./src/Logging/README.md)
+- [Middleware](./src/Middleware/README.md)
+- [Rate Limiting](./src/RateLimit/README.md)
+- [Routing](./src/Routing/README.md)
+- [Storage](./src/Storage/README.md)
+- [Support and Facades](./src/Support/README.md)
+
 ## Docker Setup
 
 The repository includes a PHP 8.4 CLI container and a MySQL container.
