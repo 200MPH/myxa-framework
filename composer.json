@@ -1,0 +1,54 @@
+{
+  "name": "200mph/myxa-framework",
+  "description": "Myxa core framework package",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Wojciech Brozyna",
+      "email": "wojciech.brozyna@gmail.com"
+    }
+  ],
+  "bin": [
+    "bin/myxa"
+  ],
+  "autoload": {
+    "psr-4": {
+      "Myxa\\": "src/",
+      "Test\\": "tests/"
+    }
+  },
+  "autoload-dev": {
+    "files": [
+      "stubs/Redis.php"
+    ]
+  },
+  "require": {
+    "php": ">=8.4",
+    "psr/container": "^1.1 || ^2.0"
+  },
+  "require-dev": {
+    "phpstan/phpstan": "^1.12",
+    "friendsofphp/php-cs-fixer": "^3.66",
+    "squizlabs/php_codesniffer": "^3.11",
+    "rector/rector": "^1.2",
+    "phpunit/phpunit": "^11.5"
+  },
+  "scripts": {
+    "test:unit": "vendor/bin/phpunit -c phpunit.xml tests/Unit",
+    "test:coverage": "vendor/bin/phpunit -c phpunit.xml tests/Unit --coverage-text --coverage-filter src",
+    "test:coverage:html": "vendor/bin/phpunit -c phpunit.xml tests/Unit --coverage-html build/coverage --coverage-filter src",
+    "test:ci": "vendor/bin/phpunit -c phpunit.xml tests",
+    "test:ci:coverage": "vendor/bin/phpunit -c phpunit.xml tests --coverage-clover build/logs/clover.xml --coverage-filter src",
+    "test:ci:coverage-check": "php scripts/check-coverage.php build/logs/clover.xml 80",
+    "phpstan": "vendor/bin/phpstan analyse src",
+    "phpcs": "vendor/bin/phpcs",
+    "phpcbf": "vendor/bin/phpcbf",
+    "psr": "vendor/bin/phpcs",
+    "psr:fix": "vendor/bin/phpcbf",
+    "cs": "vendor/bin/php-cs-fixer fix --dry-run --diff src",
+    "cs:fix": "vendor/bin/php-cs-fixer fix src tests",
+    "rector": "vendor/bin/rector process src tests --dry-run",
+    "rector:fix": "vendor/bin/rector process src tests"
+  }
+}

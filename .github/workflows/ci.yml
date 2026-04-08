@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - master
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - badges/**
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: myxa
+          MYSQL_USER: myxa
+          MYSQL_PASSWORD: myxa
+          MYSQL_ROOT_PASSWORD: root_myxa
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -umyxa -pmyxa"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: myxa_test
+          POSTGRES_USER: myxa
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U myxa -d myxa_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      MYXA_MYSQL_TEST_ENABLED: "1"
+      MYXA_MYSQL_TEST_HOST: 127.0.0.1
+      MYXA_MYSQL_TEST_PORT: "3306"
+      MYXA_MYSQL_TEST_DATABASE: myxa
+      MYXA_MYSQL_TEST_USERNAME: myxa
+      MYXA_MYSQL_TEST_PASSWORD: myxa
+      MYXA_PGSQL_TEST_ENABLED: "1"
+      MYXA_PGSQL_TEST_HOST: 127.0.0.1
+      MYXA_PGSQL_TEST_PORT: "5432"
+      MYXA_PGSQL_TEST_DATABASE: myxa_test
+      MYXA_PGSQL_TEST_USERNAME: myxa
+      MYXA_PGSQL_TEST_PASSWORD: secret
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: pcov
+          extensions: pdo_mysql, pdo_pgsql
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare build directories
+        run: mkdir -p build/logs
+
+      - name: Run PHPStan
+        run: composer phpstan
+
+      - name: Run PHPCS
+        run: composer phpcs
+
+      - name: Run full test suite with coverage
+        run: composer test:ci:coverage
+
+      - name: Enforce minimum coverage
+        run: composer test:ci:coverage-check
+
+      - name: Generate coverage badge data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: php scripts/generate-coverage-badge.php build/logs/clover.xml badges/coverage.json
+
+      - name: Commit updated coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          if [ -z "$(git status --porcelain -- badges/coverage.json)" ]; then
+            echo "Coverage badge is up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add badges/coverage.json
+          git commit -m "Update coverage badge"
+          git push origin HEAD:${GITHUB_REF_NAME}

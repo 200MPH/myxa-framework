@@ -1,0 +1,88 @@
+name: myxa-framework
+services:
+  php:
+    container_name: myxa-php-cli
+    build:
+      context: .
+      dockerfile: docker/php8.4-cli/Dockerfile
+      args:
+        UID: "${UID:-1000}"
+        GID: "${GID:-1000}"
+    working_dir: /app
+    user: app
+    environment:
+      COMPOSER_HOME: /tmp/composer-cache
+      MYXA_MYSQL_TEST_ENABLED: "1"
+      MYXA_MYSQL_TEST_HOST: mysql
+      MYXA_MYSQL_TEST_PORT: "3306"
+      MYXA_MYSQL_TEST_DATABASE: myxa
+      MYXA_MYSQL_TEST_USERNAME: myxa
+      MYXA_MYSQL_TEST_PASSWORD: myxa
+      MYXA_PGSQL_TEST_ENABLED: "1"
+      MYXA_PGSQL_TEST_HOST: postgres
+      MYXA_PGSQL_TEST_PORT: "5432"
+      MYXA_PGSQL_TEST_DATABASE: myxa_test
+      MYXA_PGSQL_TEST_USERNAME: myxa
+      MYXA_PGSQL_TEST_PASSWORD: secret
+      MYXA_REDIS_TEST_ENABLED: "1"
+      MYXA_REDIS_TEST_HOST: redis
+      MYXA_REDIS_TEST_PORT: "6379"
+      MYXA_REDIS_TEST_DATABASE: "0"
+    volumes:
+      - ./:/app
+      - composer-cache:/tmp/composer-cache
+    tty: true
+    stdin_open: true
+    command: ["sleep", "infinity"]
+
+  mysql:
+    container_name: myxa-mysql
+    image: mysql:8.4
+    env_file:
+      - ./docker/mysql/.env
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  postgres:
+    container_name: myxa-postgres
+    image: postgres:17
+    env_file:
+      - ./docker/postgres/.env
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    container_name: myxa-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  composer-cache:
+  mysql-data:
+  postgres-data:
+  redis-data:
