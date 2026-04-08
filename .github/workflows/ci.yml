@@ -8,9 +8,11 @@ on:
   push:
     branches:
       - master
+    paths-ignore:
+      - badges/**
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   tests:
@@ -63,6 +65,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
@@ -96,3 +100,21 @@ jobs:
 
       - name: Enforce minimum coverage
         run: composer test:ci:coverage-check
+
+      - name: Generate coverage badge data
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: php scripts/generate-coverage-badge.php build/logs/clover.xml badges/coverage.json
+
+      - name: Commit updated coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          if [ -z "$(git status --porcelain -- badges/coverage.json)" ]; then
+            echo "Coverage badge is up to date."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add badges/coverage.json
+          git commit -m "Update coverage badge"
+          git push origin HEAD:${GITHUB_REF_NAME}
