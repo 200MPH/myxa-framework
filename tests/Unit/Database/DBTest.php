@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Database;
 
+use BadMethodCallException;
 use InvalidArgumentException;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
@@ -159,6 +160,14 @@ final class DBTest extends TestCase
     {
         self::assertInstanceOf(QueryBuilder::class, DB::query());
         self::assertSame('SELECT * FROM "users"', DB::query(self::CONNECTION_ALIAS)->from('users')->toSql());
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('DB facade method "foobar" is not supported.');
+
+        DB::foobar();
     }
 
     public function testToRawSqlInterpolatesPositionalBindings(): void

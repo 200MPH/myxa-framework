@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Application;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Connection\PdoConnection;
@@ -167,6 +168,18 @@ final class StorageFacadeTest extends TestCase
 
         $this->expectException(\TypeError::class);
         $manager->storage('broken');
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        $manager = new StorageManager('local');
+        $manager->addStorage('local', new StorageFacadeTestMemoryStorage());
+        StorageFacade::setManager($manager);
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Storage facade method "foobar" is not supported.');
+
+        StorageFacade::foobar();
     }
 
     private function makeUploadTempFile(string $contents): string

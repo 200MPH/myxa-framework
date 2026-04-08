@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Mongo;
 
+use BadMethodCallException;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
@@ -174,6 +175,18 @@ final class MongoTest extends TestCase
         $document = $manager->collection('users')->findOne(['status' => 'active']);
 
         self::assertSame('john@example.com', $document['email']);
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        $manager = new MongoManager(self::CONNECTION_ALIAS);
+        $manager->addConnection(self::CONNECTION_ALIAS, $this->makeConnection());
+        Mongo::setManager($manager);
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Mongo facade method "foobar" is not supported.');
+
+        Mongo::foobar();
     }
 
     public function testManagerRejectsInvalidFactorySignature(): void

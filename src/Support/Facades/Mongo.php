@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Mongo\Connection\MongoCollectionInterface;
 use Myxa\Mongo\Connection\MongoConnection;
 use Myxa\Mongo\MongoManager;
@@ -39,6 +40,10 @@ final class Mongo
 
     public static function __callStatic(string $name, array $arguments): mixed
     {
+        if (!method_exists(self::getManager(), $name)) {
+            throw new BadMethodCallException(sprintf('Mongo facade method "%s" is not supported.', $name));
+        }
+
         return self::getManager()->{$name}(...$arguments);
     }
 }

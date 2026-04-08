@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Database\Exceptions\DatabaseException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Connection\PdoConnection;
@@ -179,6 +180,10 @@ final class DB
 
     public static function __callStatic(string $name, array $arguments): mixed
     {
+        if (!method_exists(self::getManager(), $name)) {
+            throw new BadMethodCallException(sprintf('DB facade method "%s" is not supported.', $name));
+        }
+
         return self::getManager()->{$name}(...$arguments);
     }
 }

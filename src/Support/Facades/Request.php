@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Http\Request as HttpRequest;
 
 /**
@@ -238,6 +239,10 @@ final class Request
      */
     public static function __callStatic(string $name, array $arguments): mixed
     {
+        if (!method_exists(self::getRequest(), $name)) {
+            throw new BadMethodCallException(sprintf('Request facade method "%s" is not supported.', $name));
+        }
+
         return self::getRequest()->{$name}(...$arguments);
     }
 }

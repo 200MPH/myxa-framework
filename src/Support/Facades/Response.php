@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use JsonException;
 use Myxa\Http\Response as HttpResponse;
 
@@ -225,6 +226,10 @@ final class Response
      */
     public static function __callStatic(string $name, array $arguments): mixed
     {
+        if (!method_exists(self::getResponse(), $name)) {
+            throw new BadMethodCallException(sprintf('Response facade method "%s" is not supported.', $name));
+        }
+
         return self::getResponse()->{$name}(...$arguments);
     }
 }

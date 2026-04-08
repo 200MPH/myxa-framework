@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Routing\RouteDefinition;
 use Myxa\Routing\Router;
 
@@ -202,6 +203,10 @@ final class Route
      */
     public static function __callStatic(string $method, array $arguments): mixed
     {
+        if (!method_exists(self::getRouter(), $method)) {
+            throw new BadMethodCallException(sprintf('Route facade method "%s" is not supported.', $method));
+        }
+
         return self::getRouter()->{$method}(...$arguments);
     }
 }

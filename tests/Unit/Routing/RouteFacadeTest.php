@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Routing;
 
+use BadMethodCallException;
 use Myxa\Application;
 use Myxa\Http\Request as HttpRequest;
 use Myxa\Middleware\MiddlewareInterface;
@@ -92,6 +93,16 @@ final class RouteFacadeTest extends TestCase
         RouteFacade::setRouter($router);
 
         self::assertTrue(RouteFacade::__callStatic('has', ['GET', '/magic']));
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        RouteFacade::setRouter(new Router(new Application()));
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Route facade method "foobar" is not supported.');
+
+        RouteFacade::foobar();
     }
 }
 

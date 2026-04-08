@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Redis;
 
+use BadMethodCallException;
 use InvalidArgumentException;
 use Myxa\Application;
 use Myxa\Redis\Connection\InMemoryRedisStore;
@@ -188,5 +189,18 @@ final class RedisTest extends TestCase
         self::assertSame(12, Redis::increment('count', 2));
         self::assertSame(12, Redis::get('count'));
         self::assertInstanceOf(RedisConnection::class, Redis::connection());
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        Redis::setManager(new RedisManager(
+            self::CONNECTION_ALIAS,
+            new RedisConnection(new InMemoryRedisStore()),
+        ));
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Redis facade method "foobar" is not supported.');
+
+        Redis::foobar();
     }
 }

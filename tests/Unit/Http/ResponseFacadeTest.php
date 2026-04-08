@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Http;
 
+use BadMethodCallException;
 use JsonException;
 use Myxa\Http\Response as HttpResponse;
 use Myxa\Support\Facades\Response as ResponseFacade;
@@ -105,5 +106,15 @@ final class ResponseFacadeTest extends TestCase
         ResponseFacade::setResponse($response);
 
         self::assertSame('magic', ResponseFacade::__callStatic('content', []));
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        ResponseFacade::setResponse(new HttpResponse());
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Response facade method "foobar" is not supported.');
+
+        ResponseFacade::foobar();
     }
 }

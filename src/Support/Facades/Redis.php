@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Myxa\Support\Facades;
 
+use BadMethodCallException;
 use Myxa\Redis\Connection\RedisConnection;
 use Myxa\Redis\RedisManager;
 
@@ -33,6 +34,10 @@ final class Redis
 
     public static function __callStatic(string $name, array $arguments): mixed
     {
+        if (!method_exists(self::getManager(), $name)) {
+            throw new BadMethodCallException(sprintf('Redis facade method "%s" is not supported.', $name));
+        }
+
         return self::getManager()->{$name}(...$arguments);
     }
 }

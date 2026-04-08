@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Http;
 
+use BadMethodCallException;
 use Myxa\Http\Request as HttpRequest;
 use Myxa\Support\Facades\Request as RequestFacade;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -78,5 +79,15 @@ final class RequestFacadeTest extends TestCase
         RequestFacade::setRequest(new HttpRequest(server: ['REQUEST_URI' => '/magic']));
 
         self::assertSame('/magic', RequestFacade::__callStatic('path', []));
+    }
+
+    public function testFacadeThrowsClearExceptionForUnknownMethod(): void
+    {
+        RequestFacade::setRequest(new HttpRequest());
+
+        $this->expectException(BadMethodCallException::class);
+        $this->expectExceptionMessage('Request facade method "foobar" is not supported.');
+
+        RequestFacade::foobar();
     }
 }
