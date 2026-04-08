@@ -24,6 +24,10 @@ services:
       MYXA_PGSQL_TEST_DATABASE: myxa_test
       MYXA_PGSQL_TEST_USERNAME: myxa
       MYXA_PGSQL_TEST_PASSWORD: secret
+      MYXA_REDIS_TEST_ENABLED: "1"
+      MYXA_REDIS_TEST_HOST: redis
+      MYXA_REDIS_TEST_PORT: "6379"
+      MYXA_REDIS_TEST_DATABASE: "0"
     volumes:
       - ./:/app
       - composer-cache:/tmp/composer-cache
@@ -63,7 +67,22 @@ services:
       retries: 20
       start_period: 10s
 
+  redis:
+    container_name: myxa-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
 volumes:
   composer-cache:
   mysql-data:
   postgres-data:
+  redis-data:

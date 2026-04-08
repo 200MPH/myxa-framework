@@ -18,6 +18,11 @@
       "Test\\": "tests/"
     }
   },
+  "autoload-dev": {
+    "files": [
+      "stubs/Redis.php"
+    ]
+  },
   "require": {
     "php": ">=8.4",
     "psr/container": "^1.1 || ^2.0"

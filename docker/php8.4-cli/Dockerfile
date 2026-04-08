@@ -17,8 +17,8 @@ RUN apt-get update \
         pdo_mysql \
         pdo_pgsql \
         zip \
-    && pecl install pcov \
-    && docker-php-ext-enable pcov \
+    && pecl install pcov redis \
+    && docker-php-ext-enable pcov redis \
     && groupadd --gid "${GID}" "${APP_USER}" \
     && useradd --uid "${UID}" --gid "${GID}" --create-home --shell /bin/bash "${APP_USER}" \
     && apt-get clean \
