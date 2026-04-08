@@ -350,7 +350,7 @@ final class ReverseEngineer
             $method = $index->type() === IndexSchema::TYPE_UNIQUE ? 'unique' : 'index';
             $columns = count($index->columns()) === 1
                 ? "'" . $index->columns()[0] . "'"
-                : '[' . implode(', ', array_map(static fn (string $column): string => "'" . $column . "'", $index->columns())) . ']';
+                : $this->exportStringArray($index->columns());
 
             $lines[] = sprintf("\$table->%s(%s, '%s');", $method, $columns, $index->name());
         }
@@ -368,10 +368,10 @@ final class ReverseEngineer
         foreach ($schema->foreignKeys() as $foreignKey) {
             $columns = count($foreignKey->columns()) === 1
                 ? "'" . $foreignKey->columns()[0] . "'"
-                : '[' . implode(', ', array_map(static fn (string $column): string => "'" . $column . "'", $foreignKey->columns())) . ']';
+                : $this->exportStringArray($foreignKey->columns());
             $references = count($foreignKey->referencedColumns()) === 1
                 ? "'" . $foreignKey->referencedColumns()[0] . "'"
-                : '[' . implode(', ', array_map(static fn (string $column): string => "'" . $column . "'", $foreignKey->referencedColumns())) . ']';
+                : $this->exportStringArray($foreignKey->referencedColumns());
 
             $line = sprintf(
                 "\$table->foreign(%s, '%s')->references(%s)->on('%s')",
@@ -426,7 +426,9 @@ final class ReverseEngineer
             $lines[] = $line;
         }
 
-        foreach ($this->renderForeignKeyLines(new TableSchema($diff->table(), [], [], $diff->addedForeignKeys())) as $line) {
+        foreach (
+            $this->renderForeignKeyLines(new TableSchema($diff->table(), [], [], $diff->addedForeignKeys())) as $line
+        ) {
             $lines[] = $line;
         }
 
@@ -464,7 +466,9 @@ final class ReverseEngineer
             $lines[] = $line;
         }
 
-        foreach ($this->renderForeignKeyLines(new TableSchema($diff->table(), [], [], $diff->droppedForeignKeys())) as $line) {
+        foreach (
+            $this->renderForeignKeyLines(new TableSchema($diff->table(), [], [], $diff->droppedForeignKeys())) as $line
+        ) {
             $lines[] = $line;
         }
 
@@ -500,8 +504,11 @@ final class ReverseEngineer
     /**
      * @param list<Blueprint> $blueprints
      */
-    private function resolveBlueprintForModelGeneration(Migration $migration, array $blueprints, ?string $table): Blueprint
-    {
+    private function resolveBlueprintForModelGeneration(
+        Migration $migration,
+        array $blueprints,
+        ?string $table,
+    ): Blueprint {
         if ($table !== null) {
             foreach ($blueprints as $blueprint) {
                 if ($blueprint->tableName() === $table) {
@@ -540,5 +547,16 @@ final class ReverseEngineer
             'Migration %s defines multiple schema blueprints; pass a table name to select one.',
             $migration::class,
         ));
+    }
+
+    /**
+     * @param list<string> $values
+     */
+    private function exportStringArray(array $values): string
+    {
+        return '[' . implode(', ', array_map(
+            static fn (string $value): string => "'" . $value . "'",
+            $values,
+        )) . ']';
     }
 }

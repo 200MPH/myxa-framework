@@ -37,7 +37,12 @@ abstract class AbstractSchemaInspector implements SchemaInspectorInterface
         $type = strtolower(trim($databaseType));
 
         return match (true) {
-            $autoIncrement && (str_contains($type, 'bigint') || str_contains($type, 'int') || $type === 'bigserial' || $type === 'serial') => [
+            $autoIncrement && (
+                str_contains($type, 'bigint')
+                || str_contains($type, 'int')
+                || $type === 'bigserial'
+                || $type === 'serial'
+            ) => [
                 'type' => 'bigInteger',
                 'options' => [],
             ],

@@ -17,11 +17,16 @@ final class MysqlSchemaInspector extends AbstractSchemaInspector
         $indexes = [];
         $foreignKeys = [];
 
-        foreach ($this->select(
-            'SELECT COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, COLUMN_KEY, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE '
-            . 'FROM information_schema.columns WHERE table_schema = ? AND table_name = ? ORDER BY ORDINAL_POSITION ASC',
-            [$schema, $table],
-        ) as $column) {
+        foreach (
+            $this->select(
+                'SELECT COLUMN_NAME, COLUMN_TYPE, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, '
+                . 'EXTRA, COLUMN_KEY, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, '
+                . 'NUMERIC_SCALE FROM information_schema.columns '
+                . 'WHERE table_schema = ? AND table_name = ? '
+                . 'ORDER BY ORDINAL_POSITION ASC',
+                [$schema, $table],
+            ) as $column
+        ) {
             $columnType = (string) $column['COLUMN_TYPE'];
             $extra = strtolower((string) ($column['EXTRA'] ?? ''));
 
@@ -33,17 +38,25 @@ final class MysqlSchemaInspector extends AbstractSchemaInspector
                 unsigned: str_contains($columnType, 'unsigned'),
                 autoIncrement: str_contains($extra, 'auto_increment'),
                 primary: (string) ($column['COLUMN_KEY'] ?? '') === 'PRI',
-                length: isset($column['CHARACTER_MAXIMUM_LENGTH']) ? (int) $column['CHARACTER_MAXIMUM_LENGTH'] : null,
-                precision: isset($column['NUMERIC_PRECISION']) ? (int) $column['NUMERIC_PRECISION'] : null,
+                length: isset($column['CHARACTER_MAXIMUM_LENGTH'])
+                    ? (int) $column['CHARACTER_MAXIMUM_LENGTH']
+                    : null,
+                precision: isset($column['NUMERIC_PRECISION'])
+                    ? (int) $column['NUMERIC_PRECISION']
+                    : null,
                 scale: isset($column['NUMERIC_SCALE']) ? (int) $column['NUMERIC_SCALE'] : null,
             );
         }
 
-        foreach ($this->select(
-            'SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX '
-            . 'FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? ORDER BY INDEX_NAME ASC, SEQ_IN_INDEX ASC',
-            [$schema, $table],
-        ) as $index) {
+        foreach (
+            $this->select(
+                'SELECT INDEX_NAME, NON_UNIQUE, COLUMN_NAME, SEQ_IN_INDEX '
+                . 'FROM information_schema.statistics '
+                . 'WHERE table_schema = ? AND table_name = ? '
+                . 'ORDER BY INDEX_NAME ASC, SEQ_IN_INDEX ASC',
+                [$schema, $table],
+            ) as $index
+        ) {
             $name = (string) $index['INDEX_NAME'];
             $type = $name === 'PRIMARY'
                 ? IndexSchema::TYPE_PRIMARY
@@ -58,15 +71,19 @@ final class MysqlSchemaInspector extends AbstractSchemaInspector
             $indexes[$name] = new IndexSchema($name, $type, $columnsForIndex);
         }
 
-        foreach ($this->select(
-            'SELECT kcu.CONSTRAINT_NAME, kcu.COLUMN_NAME, kcu.REFERENCED_TABLE_NAME, kcu.REFERENCED_COLUMN_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, kcu.ORDINAL_POSITION '
-            . 'FROM information_schema.key_column_usage kcu '
-            . 'JOIN information_schema.referential_constraints rc '
-            . 'ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA AND rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME '
-            . 'WHERE kcu.TABLE_SCHEMA = ? AND kcu.TABLE_NAME = ? AND kcu.REFERENCED_TABLE_NAME IS NOT NULL '
-            . 'ORDER BY kcu.CONSTRAINT_NAME ASC, kcu.ORDINAL_POSITION ASC',
-            [$schema, $table],
-        ) as $foreignKey) {
+        foreach (
+            $this->select(
+                'SELECT kcu.CONSTRAINT_NAME, kcu.COLUMN_NAME, kcu.REFERENCED_TABLE_NAME, '
+                . 'kcu.REFERENCED_COLUMN_NAME, rc.UPDATE_RULE, rc.DELETE_RULE, '
+                . 'kcu.ORDINAL_POSITION '
+                . 'FROM information_schema.key_column_usage kcu '
+                . 'JOIN information_schema.referential_constraints rc '
+                . 'ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA AND rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME '
+                . 'WHERE kcu.TABLE_SCHEMA = ? AND kcu.TABLE_NAME = ? AND kcu.REFERENCED_TABLE_NAME IS NOT NULL '
+                . 'ORDER BY kcu.CONSTRAINT_NAME ASC, kcu.ORDINAL_POSITION ASC',
+                [$schema, $table],
+            ) as $foreignKey
+        ) {
             $name = (string) $foreignKey['CONSTRAINT_NAME'];
             $entry = $foreignKeys[$name] ?? [
                 'columns' => [],
@@ -104,7 +121,9 @@ final class MysqlSchemaInspector extends AbstractSchemaInspector
         return array_map(
             static fn (array $row): string => (string) $row['TABLE_NAME'],
             $this->select(
-                'SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = ? AND table_type = \'BASE TABLE\' ORDER BY TABLE_NAME ASC',
+                'SELECT TABLE_NAME FROM information_schema.tables '
+                . 'WHERE table_schema = ? AND table_type = \'BASE TABLE\' '
+                . 'ORDER BY TABLE_NAME ASC',
                 [$this->currentDatabase()],
             ),
         );

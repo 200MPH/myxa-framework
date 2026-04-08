@@ -36,8 +36,7 @@ final readonly class ProfileCreated extends AbstractEvent
     public function __construct(
         public int $userId,
         ?DateTimeInterface $occurredAt = null,
-    )
-    {
+    ) {
         parent::__construct($occurredAt ?? new DateTimeImmutable('2026-04-08T12:05:00+00:00'));
     }
 }

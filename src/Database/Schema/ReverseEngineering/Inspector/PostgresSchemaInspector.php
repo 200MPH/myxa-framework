@@ -22,9 +22,14 @@ final class PostgresSchemaInspector extends AbstractSchemaInspector
             . 'COALESCE(tc.constraint_type = \'PRIMARY KEY\', false) AS is_primary '
             . 'FROM information_schema.columns c '
             . 'LEFT JOIN information_schema.key_column_usage kcu '
-            . 'ON kcu.table_schema = c.table_schema AND kcu.table_name = c.table_name AND kcu.column_name = c.column_name '
+            . 'ON kcu.table_schema = c.table_schema '
+            . 'AND kcu.table_name = c.table_name '
+            . 'AND kcu.column_name = c.column_name '
             . 'LEFT JOIN information_schema.table_constraints tc '
-            . 'ON tc.table_schema = kcu.table_schema AND tc.table_name = kcu.table_name AND tc.constraint_name = kcu.constraint_name AND tc.constraint_type = \'PRIMARY KEY\' '
+            . 'ON tc.table_schema = kcu.table_schema '
+            . 'AND tc.table_name = kcu.table_name '
+            . 'AND tc.constraint_name = kcu.constraint_name '
+            . 'AND tc.constraint_type = \'PRIMARY KEY\' '
             . 'WHERE c.table_schema = current_schema() AND c.table_name = ? '
             . 'ORDER BY c.ordinal_position ASC',
             [$table],
@@ -41,22 +46,31 @@ final class PostgresSchemaInspector extends AbstractSchemaInspector
                 defaultValue: $autoIncrement ? null : $default,
                 autoIncrement: $autoIncrement,
                 primary: filter_var($column['is_primary'], FILTER_VALIDATE_BOOL),
-                length: isset($column['character_maximum_length']) ? (int) $column['character_maximum_length'] : null,
-                precision: isset($column['numeric_precision']) ? (int) $column['numeric_precision'] : null,
+                length: isset($column['character_maximum_length'])
+                    ? (int) $column['character_maximum_length']
+                    : null,
+                precision: isset($column['numeric_precision'])
+                    ? (int) $column['numeric_precision']
+                    : null,
                 scale: isset($column['numeric_scale']) ? (int) $column['numeric_scale'] : null,
             );
         }
 
-        foreach ($this->select(
-            'SELECT tc.constraint_name, tc.constraint_type, array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns '
-            . 'FROM information_schema.table_constraints tc '
-            . 'JOIN information_schema.key_column_usage kcu '
-            . 'ON kcu.table_schema = tc.table_schema AND kcu.table_name = tc.table_name AND kcu.constraint_name = tc.constraint_name '
-            . 'WHERE tc.table_schema = current_schema() AND tc.table_name = ? '
-            . 'AND tc.constraint_type IN (\'PRIMARY KEY\', \'UNIQUE\') '
-            . 'GROUP BY tc.constraint_name, tc.constraint_type',
-            [$table],
-        ) as $index) {
+        foreach (
+            $this->select(
+                'SELECT tc.constraint_name, tc.constraint_type, '
+                . 'array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns '
+                . 'FROM information_schema.table_constraints tc '
+                . 'JOIN information_schema.key_column_usage kcu '
+                . 'ON kcu.table_schema = tc.table_schema '
+                . 'AND kcu.table_name = tc.table_name '
+                . 'AND kcu.constraint_name = tc.constraint_name '
+                . 'WHERE tc.table_schema = current_schema() AND tc.table_name = ? '
+                . 'AND tc.constraint_type IN (\'PRIMARY KEY\', \'UNIQUE\') '
+                . 'GROUP BY tc.constraint_name, tc.constraint_type',
+                [$table],
+            ) as $index
+        ) {
             $indexes[] = new IndexSchema(
                 name: (string) $index['constraint_name'],
                 type: (string) $index['constraint_type'] === 'PRIMARY KEY'
@@ -66,10 +80,12 @@ final class PostgresSchemaInspector extends AbstractSchemaInspector
             );
         }
 
-        foreach ($this->select(
-            'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
-            [$table],
-        ) as $index) {
+        foreach (
+            $this->select(
+                'SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema() AND tablename = ?',
+                [$table],
+            ) as $index
+        ) {
             $name = (string) $index['indexname'];
             if ($this->containsIndex($indexes, $name)) {
                 continue;
@@ -92,23 +108,31 @@ final class PostgresSchemaInspector extends AbstractSchemaInspector
             );
         }
 
-        foreach ($this->select(
-            'SELECT tc.constraint_name, '
-            . 'array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns, '
-            . 'ccu.table_name AS foreign_table_name, '
-            . 'array_agg(ccu.column_name ORDER BY kcu.ordinal_position) AS foreign_columns, '
-            . 'rc.update_rule, rc.delete_rule '
-            . 'FROM information_schema.table_constraints tc '
-            . 'JOIN information_schema.key_column_usage kcu '
-            . 'ON kcu.table_schema = tc.table_schema AND kcu.table_name = tc.table_name AND kcu.constraint_name = tc.constraint_name '
-            . 'JOIN information_schema.constraint_column_usage ccu '
-            . 'ON ccu.constraint_schema = tc.table_schema AND ccu.constraint_name = tc.constraint_name '
-            . 'JOIN information_schema.referential_constraints rc '
-            . 'ON rc.constraint_schema = tc.table_schema AND rc.constraint_name = tc.constraint_name '
-            . 'WHERE tc.table_schema = current_schema() AND tc.table_name = ? AND tc.constraint_type = \'FOREIGN KEY\' '
-            . 'GROUP BY tc.constraint_name, ccu.table_name, rc.update_rule, rc.delete_rule',
-            [$table],
-        ) as $foreignKey) {
+        foreach (
+            $this->select(
+                'SELECT tc.constraint_name, '
+                . 'array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns, '
+                . 'ccu.table_name AS foreign_table_name, '
+                . 'array_agg(ccu.column_name ORDER BY kcu.ordinal_position) AS foreign_columns, '
+                . 'rc.update_rule, rc.delete_rule '
+                . 'FROM information_schema.table_constraints tc '
+                . 'JOIN information_schema.key_column_usage kcu '
+                . 'ON kcu.table_schema = tc.table_schema '
+                . 'AND kcu.table_name = tc.table_name '
+                . 'AND kcu.constraint_name = tc.constraint_name '
+                . 'JOIN information_schema.constraint_column_usage ccu '
+                . 'ON ccu.constraint_schema = tc.table_schema '
+                . 'AND ccu.constraint_name = tc.constraint_name '
+                . 'JOIN information_schema.referential_constraints rc '
+                . 'ON rc.constraint_schema = tc.table_schema '
+                . 'AND rc.constraint_name = tc.constraint_name '
+                . 'WHERE tc.table_schema = current_schema() '
+                . 'AND tc.table_name = ? '
+                . 'AND tc.constraint_type = \'FOREIGN KEY\' '
+                . 'GROUP BY tc.constraint_name, ccu.table_name, rc.update_rule, rc.delete_rule',
+                [$table],
+            ) as $foreignKey
+        ) {
             $foreignKeys[] = new ForeignKeySchema(
                 name: (string) $foreignKey['constraint_name'],
                 columns: $this->parsePostgresArray((string) $foreignKey['columns']),
@@ -127,7 +151,9 @@ final class PostgresSchemaInspector extends AbstractSchemaInspector
         return array_map(
             static fn (array $row): string => (string) $row['table_name'],
             $this->select(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' ORDER BY table_name ASC",
+                "SELECT table_name FROM information_schema.tables "
+                . "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE' "
+                . "ORDER BY table_name ASC",
             ),
         );
     }

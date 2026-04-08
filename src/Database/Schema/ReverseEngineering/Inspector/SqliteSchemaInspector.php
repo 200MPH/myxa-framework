@@ -49,7 +49,12 @@ final class SqliteSchemaInspector extends AbstractSchemaInspector
             }
 
             $columnsForIndex = [];
-            foreach ($this->select(sprintf('PRAGMA index_info("%s")', str_replace('"', '""', (string) $index['name']))) as $item) {
+            $indexInfo = sprintf(
+                'PRAGMA index_info("%s")',
+                str_replace('"', '""', (string) $index['name']),
+            );
+
+            foreach ($this->select($indexInfo) as $item) {
                 $columnsForIndex[] = (string) $item['name'];
             }
 
@@ -61,7 +66,9 @@ final class SqliteSchemaInspector extends AbstractSchemaInspector
         }
 
         $fkGroups = [];
-        foreach ($this->select(sprintf('PRAGMA foreign_key_list("%s")', str_replace('"', '""', $table))) as $foreignKey) {
+        $foreignKeyList = sprintf('PRAGMA foreign_key_list("%s")', str_replace('"', '""', $table));
+
+        foreach ($this->select($foreignKeyList) as $foreignKey) {
             $id = (string) ($foreignKey['id'] ?? '0');
             $fkGroups[$id]['table'] = (string) $foreignKey['table'];
             $fkGroups[$id]['on_delete'] = (string) ($foreignKey['on_delete'] ?? '');
@@ -88,7 +95,9 @@ final class SqliteSchemaInspector extends AbstractSchemaInspector
     {
         return array_map(
             static fn (array $row): string => (string) $row['name'],
-            $this->select("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC"),
+            $this->select(
+                "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name ASC",
+            ),
         );
     }
 

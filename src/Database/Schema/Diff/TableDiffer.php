@@ -89,7 +89,10 @@ final class TableDiffer
 
         foreach ($to->indexes() as $index) {
             $original = $fromIndexes[$index->name()] ?? null;
-            if (!$original instanceof IndexSchema || $this->indexSignature($original) !== $this->indexSignature($index)) {
+            if (
+                !$original instanceof IndexSchema
+                || $this->indexSignature($original) !== $this->indexSignature($index)
+            ) {
                 $added[] = $index;
             }
         }

@@ -117,7 +117,9 @@ final class DatabaseManager
 
     public function query(?string $connection = null): QueryBuilder
     {
-        $resolvedConnection = $connection !== null ? $this->normalizeConnectionName($connection) : $this->getDefaultConnection();
+        $resolvedConnection = $connection !== null
+            ? $this->normalizeConnectionName($connection)
+            : $this->getDefaultConnection();
 
         if (!$this->hasConnection($resolvedConnection)) {
             return new QueryBuilder();
