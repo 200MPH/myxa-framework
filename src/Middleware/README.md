@@ -15,7 +15,7 @@ use Myxa\Support\Facades\Route;
 use Myxa\Middleware\AuthMiddleware;
 
 Route::get('/dashboard', [DashboardController::class, 'show'])
-    ->middleware(AuthMiddleware::for('web'));
+    ->middleware(AuthMiddleware::using('web'));
 ```
 
 ## Group Usage
