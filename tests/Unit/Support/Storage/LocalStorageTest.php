@@ -69,6 +69,20 @@ final class LocalStorageTest extends TestCase
         $storage->put('../escape.txt', 'nope');
     }
 
+    public function testLocalStorageExposesAliasPathAndMissingReadDeleteBehavior(): void
+    {
+        $storage = new LocalStorage($this->root, 'files');
+
+        self::assertSame('files', $storage->alias());
+        self::assertStringEndsWith('docs/test.txt', str_replace('\\', '/', $storage->path('docs/test.txt')));
+        self::assertFalse($storage->delete('docs/test.txt'));
+
+        $this->expectException(\Myxa\Storage\Exceptions\StorageException::class);
+        $this->expectExceptionMessage('Unable to read file');
+
+        $storage->read('docs/test.txt');
+    }
+
     private function deleteDirectory(string $directory): void
     {
         if (!is_dir($directory)) {

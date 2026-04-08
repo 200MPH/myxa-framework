@@ -102,4 +102,61 @@ final class UploadedFileTest extends TestCase
         self::assertSame(900, $upload->errorCode());
         self::assertSame('File input is empty or $_FILES data is corrupted.', $upload->errorMessage());
     }
+
+    public function testUploadedFileExposesMetadataAndCanRename(): void
+    {
+        $upload = UploadedFile::fromArray([
+            'name' => 'My Avatar.png',
+            'type' => 'image/png',
+            'size' => 12,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ]);
+
+        $upload->rename(' renamed.jpg ');
+
+        self::assertSame('renamed.jpg', $upload->name());
+        self::assertSame('jpg', $upload->extension());
+        self::assertSame(12, $upload->size());
+        self::assertSame($this->tempFile, $upload->tempPath());
+    }
+
+    public function testUploadedFileReportsPhpErrorsAndReadFailures(): void
+    {
+        $partial = UploadedFile::fromArray([
+            'name' => 'partial.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 3,
+        ]);
+
+        self::assertSame('The uploaded file was only partially uploaded.', $partial->errorMessage());
+
+        $missingFolder = UploadedFile::fromArray([
+            'name' => 'missing.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 6,
+        ]);
+
+        self::assertSame('Missing a temporary folder.', $missingFolder->errorMessage());
+
+        $invalidRead = UploadedFile::fromArray([
+            'name' => 'ghost.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile . '.missing',
+            'error' => 0,
+        ]);
+
+        $this->expectException(StorageException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Unable to read uploaded file from "%s".',
+            $this->tempFile . '.missing',
+        ));
+
+        $invalidRead->contents();
+    }
 }

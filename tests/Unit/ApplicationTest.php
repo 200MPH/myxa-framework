@@ -245,6 +245,49 @@ final class ApplicationTest extends TestCase
 
         $provider->exposeApplication();
     }
+
+    public function testContainerSupportsInvokableClassesAndRejectsInvalidCallables(): void
+    {
+        $app = new Application();
+
+        self::assertSame(
+            'invoked:5',
+            $app->call(ApplicationTestInvokable::class, ['value' => 5]),
+        );
+
+        try {
+            $app->call(['invalid']);
+            self::fail('Expected invalid callable exception.');
+        } catch (BindingResolutionException $exception) {
+            self::assertSame('Target [array] is not a valid callable.', $exception->getMessage());
+        }
+
+        try {
+            $app->call(42);
+            self::fail('Expected invalid callable exception.');
+        } catch (BindingResolutionException $exception) {
+            self::assertSame('Target [integer] is not a valid callable.', $exception->getMessage());
+        }
+    }
+
+    public function testContainerResolvesDefaultValuesAndNamedClassOverrides(): void
+    {
+        $app = new Application();
+        $dependency = new ApplicationTestDependency();
+
+        self::assertSame(
+            'fallback',
+            $app->call(static fn (string $name = 'fallback'): string => $name),
+        );
+
+        self::assertSame(
+            $dependency,
+            $app->call(
+                static fn (ApplicationTestDependency $dependency): ApplicationTestDependency => $dependency,
+                ['dependency' => $dependency],
+            ),
+        );
+    }
 }
 
 final class ApplicationTestDependency
@@ -309,6 +352,14 @@ final class ApplicationTestCallableTarget
     public static function staticMethod(string $name = 'guest'): string
     {
         return sprintf('static:%s', $name);
+    }
+}
+
+final class ApplicationTestInvokable
+{
+    public function __invoke(int $value): string
+    {
+        return sprintf('invoked:%d', $value);
     }
 }
 

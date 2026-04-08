@@ -157,6 +157,30 @@ final class SchemaTest extends TestCase
         self::assertSame(['id', 'title'], array_column($this->tableInfo('notes'), 'name'));
     }
 
+    public function testBlueprintTableSchemaFactoryBuildsNormalizedTableSchema(): void
+    {
+        $blueprint = Blueprint::create('audit_logs');
+        $blueprint->id();
+        $blueprint->string('event')->unique();
+        $blueprint->bigInteger('user_id')->unsigned();
+        $blueprint->foreign('user_id')->references('id')->on('users')->onDelete('cascade')->onUpdate('cascade');
+        $blueprint->index('created_at');
+
+        $schema = (new BlueprintTableSchemaFactory())->fromBlueprint($blueprint);
+
+        self::assertSame('audit_logs', $schema->name());
+        self::assertSame(['id', 'event', 'user_id'], array_map(
+            static fn (ColumnSchema $column): string => $column->name(),
+            $schema->columns(),
+        ));
+        self::assertSame(
+            [ReverseIndexSchema::TYPE_UNIQUE, ReverseIndexSchema::TYPE_INDEX],
+            array_map(static fn (ReverseIndexSchema $index): string => $index->type(), $schema->indexes()),
+        );
+        self::assertSame('users', $schema->foreignKeys()[0]->referencedTable());
+        self::assertSame(['user_id'], $schema->foreignKeys()[0]->columns());
+    }
+
     public function testSchemaCreatesTableWithIndexesAndForeignKeys(): void
     {
         $schema = $this->makeManager()->schema();

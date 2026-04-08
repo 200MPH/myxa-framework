@@ -33,7 +33,7 @@ final class ModelMetadata
     /** @var array<class-string, array<string, list<ReflectionMethod>>> */
     private static array $hookMethodCache = [];
 
-    public function __construct(private readonly Model $model)
+    public function __construct(private readonly object $model)
     {
     }
 

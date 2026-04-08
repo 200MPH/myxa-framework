@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Test\Unit\Auth;
 
+use InvalidArgumentException;
 use Myxa\Application;
 use Myxa\Auth\AuthGuardInterface;
 use Myxa\Auth\AuthManager;
@@ -84,17 +85,74 @@ final class AuthManagerTest extends TestCase
         self::assertTrue($sessionGuard->check($webRequest));
         self::assertTrue($apiGuard->check($apiRequest));
     }
+
+    public function testAuthManagerCanSwapDefaultGuardsAndClearCachedUsers(): void
+    {
+        $app = new Application();
+        $manager = new AuthManager($app);
+        $webGuard = new AuthManagerTestGuard();
+        $apiGuard = new AuthManagerTestGuard('user-2');
+        $manager->extend('web', $webGuard);
+        $manager->extend('api', $apiGuard);
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/me',
+        ]);
+
+        self::assertSame('web', $manager->defaultGuard());
+        self::assertSame('user-1', $manager->user($request));
+        $manager->shouldUse('api');
+        self::assertSame('api', $manager->defaultGuard());
+        self::assertSame('user-2', $manager->user($request));
+        self::assertTrue($manager->check($request));
+
+        $replacement = new AuthManagerTestGuard('user-3');
+        $manager->extend('api', $replacement);
+
+        self::assertSame('user-3', $manager->user($request, 'api'));
+        self::assertSame(1, $replacement->calls);
+    }
+
+    public function testAuthManagerRejectsMissingAndInvalidGuards(): void
+    {
+        $app = new Application();
+        $manager = new AuthManager($app);
+
+        try {
+            $manager->guard('missing');
+            self::fail('Expected missing guard exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Authentication guard [missing] is not registered.', $exception->getMessage());
+        }
+
+        $app->instance('broken.guard', new class
+        {
+        });
+        $manager->extend('broken', 'broken.guard');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Authentication guard [broken.guard] must implement %s.',
+            AuthGuardInterface::class,
+        ));
+
+        $manager->guard('broken');
+    }
 }
 
 final class AuthManagerTestGuard implements AuthGuardInterface
 {
     public int $calls = 0;
 
+    public function __construct(private readonly string $user = 'user-1')
+    {
+    }
+
     public function user(Request $request): mixed
     {
         $this->calls++;
 
-        return 'user-1';
+        return $this->user;
     }
 
     public function check(Request $request): bool

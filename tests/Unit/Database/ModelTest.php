@@ -162,6 +162,20 @@ final class Comment extends Model
     }
 }
 
+final class BrokenRelationUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    public function invalidRelation(): string
+    {
+        return 'invalid';
+    }
+}
+
 final class ExternalUser extends Model
 {
     protected string $table = 'external_users';
@@ -304,6 +318,25 @@ final class ModelTest extends TestCase
 
         self::assertCount(1, $users);
         self::assertSame('jane@example.com', $users[0]->email);
+    }
+
+    public function testModelMakeAllAndRelationHelpers(): void
+    {
+        $made = User::make(['email' => 'made@example.com', 'status' => 'draft']);
+
+        self::assertFalse($made->exists());
+        self::assertTrue($made->isReadOnly() === false);
+        self::assertFalse(isset($made->profile));
+        $made->setRelation('profile', 'loaded');
+        self::assertTrue($made->relationLoaded('profile'));
+        self::assertSame('loaded', $made->getRelation('profile'));
+        self::assertTrue(isset($made->profile));
+
+        User::create(['email' => 'all-a@example.com', 'status' => 'active']);
+        User::create(['email' => 'all-b@example.com', 'status' => 'archived']);
+
+        self::assertCount(1, User::all(limit: 1));
+        self::assertCount(1, User::all(limit: 1, offset: 1));
     }
 
     public function testCreateAndSavePersistModels(): void
@@ -597,6 +630,7 @@ final class ModelTest extends TestCase
     {
         $newUser = (new User(['email' => 'readonly@example.com', 'status' => 'draft']))->setReadOnly();
 
+        self::assertTrue($newUser->isReadOnly());
         self::assertFalse($newUser->save());
 
         $persisted = User::create(['email' => 'persisted@example.com', 'status' => 'active']);
@@ -616,6 +650,46 @@ final class ModelTest extends TestCase
         self::assertFalse($copy->exists());
         self::assertTrue($copy->save());
         self::assertNotSame($user->getKey(), $copy->getKey());
+    }
+
+    public function testModelCanUnsetDeclaredAndHydratedAttributes(): void
+    {
+        $user = SecureUser::create(['email' => 'unset@example.com', 'status' => 'active']);
+        $user->password_hash = 'secret';
+
+        unset($user->password_hash);
+        self::assertNull($user->password_hash);
+
+        $external = ExternalUser::hydrate(['uuid' => 'abc-1', 'email' => 'external@example.com']);
+        unset($external->uuid);
+        self::assertNull($external->getKey());
+    }
+
+    public function testModelRejectsInvalidRelatedModelClass(): void
+    {
+        $user = new class extends Model
+        {
+            protected string $table = 'users';
+
+            protected string $email = '';
+
+            protected string $status = '';
+
+            public function invalid(): \Myxa\Database\Model\Relation
+            {
+                /** @phpstan-ignore-next-line */
+                return $this->hasOne(\stdClass::class);
+            }
+        };
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Related model "%s" must extend %s.',
+            \stdClass::class,
+            Model::class,
+        ));
+
+        $user->invalid();
     }
 
     public function testRelationsResolveHasOneHasManyAndBelongsTo(): void
@@ -834,6 +908,19 @@ final class ModelTest extends TestCase
         ExternalUser::findOrFail('missing');
     }
 
+    public function testModelNotFoundExceptionExposesContext(): void
+    {
+        $exception = ModelNotFoundException::forModel(User::class);
+
+        self::assertSame(User::class, $exception->getModelClass());
+        self::assertNull($exception->getKey());
+
+        $keyed = ModelNotFoundException::forKey(ExternalUser::class, 'missing');
+
+        self::assertSame(ExternalUser::class, $keyed->getModelClass());
+        self::assertSame('missing', $keyed->getKey());
+    }
+
     public function testModelsCanUseDifferentConnectionAliases(): void
     {
         $this->makeManager()->insert(
@@ -867,6 +954,55 @@ final class ModelTest extends TestCase
                 self::REMOTE_CONNECTION_ALIAS,
             )[0]['status'],
         );
+    }
+
+    public function testModelQueryExposesSqlBindingsAndAdditionalHelpers(): void
+    {
+        User::create(['email' => 'helper-a@example.com', 'status' => 'active']);
+        User::create(['email' => 'helper-b@example.com', 'status' => 'pending']);
+
+        $joinedQuery = User::query()
+            ->select('users.email', 'users.status')
+            ->whereBetween('users.id', 1, 2)
+            ->whereIn('status', ['active', 'pending'])
+            ->leftJoin('profiles', 'profiles.user_id', '=', 'users.id')
+            ->orderBy('users.id');
+
+        self::assertStringContainsString('LEFT JOIN', $joinedQuery->toSql());
+        self::assertSame([1, 2, 'active', 'pending'], $joinedQuery->getBindings());
+
+        $query = User::query()
+            ->whereKey(1)
+            ->orderBy('id');
+
+        self::assertTrue($query->exists());
+        self::assertSame('helper-a@example.com', $query->firstOrFail()->email);
+    }
+
+    public function testModelQueryRejectsMissingAndInvalidRelationsDuringEagerLoading(): void
+    {
+        User::create(['email' => 'relations-missing@example.com', 'status' => 'active']);
+
+        try {
+            User::query()->with('missingRelation')->get();
+            self::fail('Expected missing relation exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                sprintf('Relation "missingRelation" is not defined on model %s.', User::class),
+                $exception->getMessage(),
+            );
+        }
+
+        BrokenRelationUser::create(['email' => 'broken-relation@example.com', 'status' => 'active']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Relation "invalidRelation" on model %s must return %s.',
+            BrokenRelationUser::class,
+            \Myxa\Database\Model\Relation::class,
+        ));
+
+        BrokenRelationUser::query()->with('invalidRelation')->get();
     }
 
     private function makeManager(): DatabaseManager

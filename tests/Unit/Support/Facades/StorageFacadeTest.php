@@ -11,7 +11,9 @@ use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Support\Facades\Storage as StorageFacade;
 use Myxa\Storage\Db\DatabaseStorage;
 use Myxa\Storage\Local\LocalStorage;
+use Myxa\Storage\StorageInterface;
 use Myxa\Storage\StorageManager;
+use Myxa\Storage\StoredFile;
 use Myxa\Storage\StorageServiceProvider;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -86,6 +88,85 @@ final class StorageFacadeTest extends TestCase
         self::assertSame('hello', StorageFacade::read('notes/welcome.txt'));
         self::assertSame('persisted', StorageFacade::read('notes/welcome.txt', 'db'));
         self::assertSame('banner', StorageFacade::read($uploaded->location()));
+    }
+
+    public function testStorageManagerSupportsFactoriesAndProxyMethods(): void
+    {
+        $manager = new StorageManager(' local ');
+        $storage = new StorageFacadeTestMemoryStorage();
+        $manager->addStorage('local', fn (): StorageFacadeTestMemoryStorage => $storage);
+
+        self::assertSame('local', $manager->getDefaultStorage());
+        self::assertTrue($manager->hasStorage('local'));
+        self::assertSame($storage, $manager->storage());
+
+        $stored = $manager->put('docs/a.txt', 'alpha');
+
+        self::assertSame('alpha', $manager->read('docs/a.txt'));
+        self::assertTrue($manager->exists('docs/a.txt'));
+        self::assertSame($stored->location(), $manager->get('docs/a.txt')?->location());
+        self::assertTrue($manager->delete('docs/a.txt'));
+        self::assertFalse($manager->exists('docs/a.txt'));
+    }
+
+    public function testStorageManagerValidatesFactoriesAndAliases(): void
+    {
+        $manager = new StorageManager('local');
+        $manager->addStorage('local', new StorageFacadeTestMemoryStorage());
+
+        try {
+            $manager->addStorage('local', new StorageFacadeTestMemoryStorage());
+            self::fail('Expected duplicate storage alias exception.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('Storage alias "local" is already registered.', $exception->getMessage());
+        }
+
+        try {
+            $manager->storage('missing');
+            self::fail('Expected missing storage exception.');
+        } catch (\RuntimeException $exception) {
+            self::assertSame('Storage alias "missing" is not registered.', $exception->getMessage());
+        }
+
+        try {
+            new StorageManager(' ');
+            self::fail('Expected invalid default storage exception.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Storage alias cannot be empty.', $exception->getMessage());
+        }
+    }
+
+    public function testStorageManagerSupportsUploadsAndFactoryValidation(): void
+    {
+        $manager = new StorageManager('local');
+        $storage = new StorageFacadeTestMemoryStorage();
+        $manager->addStorage('local', $storage);
+
+        $uploaded = $manager->upload([
+            'name' => 'asset.txt',
+            'type' => 'text/plain',
+            'size' => 5,
+            'tmp_name' => $this->makeUploadTempFile('asset'),
+            'error' => 0,
+        ], 'uploads');
+
+        self::assertSame('uploads', $uploaded->location());
+        self::assertSame('asset', $storage->read('uploads'));
+
+        try {
+            $manager->addStorage('broken', static fn (StorageManager $one, string $two): LocalStorage => throw new \RuntimeException('nope'));
+            self::fail('Expected invalid factory signature exception.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame(
+                'Storage factory for alias "broken" must accept zero or one parameter.',
+                $exception->getMessage(),
+            );
+        }
+
+        $manager->addStorage('broken', static fn () => new \stdClass(), true);
+
+        $this->expectException(\TypeError::class);
+        $manager->storage('broken');
     }
 
     private function makeUploadTempFile(string $contents): string
@@ -166,5 +247,58 @@ final class StorageFacadeTest extends TestCase
         $pdoProperty->setValue($connection, $pdo);
 
         return $connection;
+    }
+}
+
+final class StorageFacadeTestMemoryStorage implements StorageInterface
+{
+    /** @var array<string, StoredFile> */
+    private array $files = [];
+
+    /** @var array<string, string> */
+    private array $contents = [];
+
+    public function put(string $location, string $contents, array $options = []): StoredFile
+    {
+        $stored = new StoredFile(
+            storage: 'memory',
+            location: $location,
+            name: $options['name'] ?? basename($location),
+            size: strlen($contents),
+            mimeType: $options['mime_type'] ?? null,
+            checksum: sha1($contents),
+            metadata: $options['metadata'] ?? [],
+        );
+
+        $this->files[$location] = $stored;
+        $this->contents[$location] = $contents;
+
+        return $stored;
+    }
+
+    public function get(string $location): ?StoredFile
+    {
+        return $this->files[$location] ?? null;
+    }
+
+    public function read(string $location): string
+    {
+        return $this->contents[$location];
+    }
+
+    public function delete(string $location): bool
+    {
+        if (!isset($this->files[$location])) {
+            return false;
+        }
+
+        unset($this->files[$location], $this->contents[$location]);
+
+        return true;
+    }
+
+    public function exists(string $location): bool
+    {
+        return isset($this->files[$location]);
     }
 }

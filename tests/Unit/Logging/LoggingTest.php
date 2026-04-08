@@ -61,4 +61,28 @@ final class LoggingTest extends TestCase
         self::assertInstanceOf(NullLogger::class, $app->make(LoggerInterface::class));
         self::assertSame($app->make(LoggerInterface::class), $app->make('logger'));
     }
+
+    public function testFileLoggerNormalizesThrowableAndStringableContext(): void
+    {
+        $logger = new FileLogger($this->path);
+
+        $logger->log(LogLevel::Info, 'Context', [
+            'exception' => new \RuntimeException('boom'),
+            'stringable' => new class implements \Stringable
+            {
+                public function __toString(): string
+                {
+                    return 'stringable-value';
+                }
+            },
+            'nested' => ['answer' => 42],
+        ]);
+
+        $contents = file_get_contents($this->path);
+
+        self::assertIsString($contents);
+        self::assertStringContainsString('"message":"boom"', $contents);
+        self::assertStringContainsString('"stringable":"stringable-value"', $contents);
+        self::assertStringContainsString('"nested":{"answer":42}', $contents);
+    }
 }

@@ -104,6 +104,32 @@ final class DebugFacadeTest extends TestCase
         rmdir(dirname($path));
         rmdir(dirname(dirname($path)));
     }
+
+    public function testDumpThrowsWhenCustomTerminatorReturnsUnexpectedly(): void
+    {
+        $stream = fopen('php://temp', 'w+');
+        Debug::setOutput($stream);
+        Debug::setTerminator(static function (int $code): void {
+        });
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Debug terminator returned unexpectedly.');
+
+        Debug::dump('still here');
+    }
+
+    public function testDebugWriteCanResolveGlobalFunctionCallsite(): void
+    {
+        Debug::setLogPath($this->logPath);
+
+        debug_facade_test_global_writer();
+
+        $contents = file_get_contents($this->logPath);
+
+        self::assertIsString($contents);
+        self::assertStringContainsString('from-global', $contents);
+        self::assertStringContainsString(basename(__FILE__), $contents);
+    }
 }
 
 final class DebugFacadeTestTermination extends \RuntimeException
@@ -112,4 +138,9 @@ final class DebugFacadeTestTermination extends \RuntimeException
     {
         parent::__construct('Debug terminated.');
     }
+}
+
+function debug_facade_test_global_writer(): void
+{
+    Debug::write('from-global');
 }
