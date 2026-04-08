@@ -445,8 +445,11 @@ abstract class Model implements JsonSerializable
         }
 
         $this->applyPersistenceHooks();
+        $this->runHooks(HookEvent::BeforeSave);
 
         if ($this->exists) {
+            $this->runHooks(HookEvent::BeforeUpdate);
+
             $key = $this->getKey();
             if ($key === null) {
                 throw new LogicException('Cannot update a persisted model without a primary key.');
@@ -464,6 +467,8 @@ abstract class Model implements JsonSerializable
                 ->where(static::primaryKey(), '=', $key);
 
             $this->manager()->update($query->toSql(), $query->getBindings(), static::connectionName());
+            $this->runHooks(HookEvent::AfterUpdate);
+            $this->runHooks(HookEvent::AfterSave);
 
             return true;
         }
@@ -484,6 +489,7 @@ abstract class Model implements JsonSerializable
         }
 
         $this->exists = true;
+        $this->runHooks(HookEvent::AfterSave);
 
         return true;
     }
@@ -502,6 +508,8 @@ abstract class Model implements JsonSerializable
             return false;
         }
 
+        $this->runHooks(HookEvent::BeforeDelete);
+
         $query = $this->manager()
             ->query()
             ->deleteFrom(static::table())
@@ -513,6 +521,7 @@ abstract class Model implements JsonSerializable
         }
 
         $this->exists = false;
+        $this->runHooks(HookEvent::AfterDelete);
         $this->setAttribute(static::primaryKey(), null);
 
         return true;
@@ -695,6 +704,13 @@ abstract class Model implements JsonSerializable
             if (method_exists($this, $method)) {
                 $this->{$method}();
             }
+        }
+    }
+
+    private function runHooks(HookEvent $event): void
+    {
+        foreach ($this->propertyMetadata()->hookMethodsFor($event) as $method) {
+            $method->invoke($this);
         }
     }
 

@@ -10,6 +10,7 @@ use Myxa\Database\DatabaseManager;
 use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
+use Myxa\Database\Attributes\Hook;
 use Myxa\Database\Attributes\Internal;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
@@ -17,6 +18,7 @@ use Myxa\Database\Model\CastType;
 use Myxa\Database\Model\HasBlameable;
 use Myxa\Database\Model\HasManyRelation;
 use Myxa\Database\Model\HasTimestamps;
+use Myxa\Database\Model\HookEvent;
 use Myxa\Database\Model\Model;
 use Myxa\Database\Model\Exceptions\ModelNotFoundException;
 use Myxa\Database\Model\ModelQuery;
@@ -181,6 +183,57 @@ final class AuditedUser extends Model
     protected string $email = '';
 
     protected string $status = '';
+}
+
+final class ObservedUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Internal]
+    public array $hookLog = [];
+
+    #[Hook(HookEvent::BeforeSave)]
+    protected function normalizeEmailBeforeSave(): void
+    {
+        $this->hookLog[] = 'before_save';
+        $this->email = strtolower(trim($this->email));
+    }
+
+    #[Hook(HookEvent::AfterSave)]
+    protected function markAfterSave(): void
+    {
+        $this->hookLog[] = 'after_save';
+        $this->status = sprintf('%s:saved', $this->status);
+    }
+
+    #[Hook(HookEvent::BeforeUpdate)]
+    protected function markBeforeUpdate(): void
+    {
+        $this->hookLog[] = 'before_update';
+        $this->status = sprintf('%s:updating', $this->status);
+    }
+
+    #[Hook(HookEvent::AfterUpdate)]
+    protected function markAfterUpdate(): void
+    {
+        $this->hookLog[] = 'after_update';
+    }
+
+    #[Hook(HookEvent::BeforeDelete)]
+    protected function markBeforeDelete(): void
+    {
+        $this->hookLog[] = 'before_delete';
+    }
+
+    #[Hook(HookEvent::AfterDelete)]
+    protected function markAfterDelete(): void
+    {
+        $this->hookLog[] = 'after_delete';
+    }
 }
 
 #[CoversClass(Model::class)]
@@ -626,6 +679,73 @@ final class ModelTest extends TestCase
                 [$user->getKey()],
             )[0],
         );
+    }
+
+    public function testHookMethodsRunBeforeAndAfterSave(): void
+    {
+        $user = new ObservedUser([
+            'email' => '  MIXED@Example.COM ',
+            'status' => 'draft',
+        ]);
+
+        self::assertTrue($user->save());
+        self::assertSame(['before_save', 'after_save'], $user->hookLog);
+        self::assertSame('mixed@example.com', $user->email);
+        self::assertSame('draft:saved', $user->status);
+        self::assertSame(
+            [
+                'email' => 'mixed@example.com',
+                'status' => 'draft',
+            ],
+            $this->makeManager()->select(
+                'SELECT email, status FROM users WHERE id = ?',
+                [$user->getKey()],
+            )[0],
+        );
+    }
+
+    public function testUpdateSaveRunsSaveAndUpdateHooks(): void
+    {
+        $user = ObservedUser::create([
+            'email' => 'first@example.com',
+            'status' => 'draft',
+        ]);
+
+        self::assertSame(['before_save', 'after_save'], $user->hookLog);
+
+        $user->hookLog = [];
+        $user->email = ' SECOND@example.com ';
+        $user->status = 'published';
+
+        self::assertTrue($user->save());
+        self::assertSame(['before_save', 'before_update', 'after_update', 'after_save'], $user->hookLog);
+        self::assertSame('second@example.com', $user->email);
+        self::assertSame('published:updating:saved', $user->status);
+        self::assertSame(
+            [
+                'email' => 'second@example.com',
+                'status' => 'published:updating',
+            ],
+            $this->makeManager()->select(
+                'SELECT email, status FROM users WHERE id = ?',
+                [$user->getKey()],
+            )[0],
+        );
+    }
+
+    public function testDeleteRunsDeleteHooks(): void
+    {
+        $user = ObservedUser::create([
+            'email' => 'delete-hooks@example.com',
+            'status' => 'draft',
+        ]);
+
+        $user->hookLog = [];
+
+        self::assertTrue($user->delete());
+        self::assertSame(['before_delete', 'after_delete'], $user->hookLog);
+        self::assertFalse($user->exists());
+        self::assertNull($user->getKey());
     }
 
     public function testFindOrFailThrowsModelNotFoundException(): void

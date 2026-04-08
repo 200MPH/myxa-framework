@@ -5,7 +5,9 @@ Models are active-record style classes built around declared properties.
 ## Example
 
 ```php
+use Myxa\Database\Attributes\Hook;
 use Myxa\Database\Model\HasTimestamps;
+use Myxa\Database\Model\HookEvent;
 use Myxa\Database\Model\Model;
 
 final class User extends Model
@@ -19,6 +21,76 @@ final class User extends Model
     protected string $status = '';
 }
 ```
+
+## Hooks
+
+Use `#[Hook(...)]` on model methods to run code around persistence:
+
+```php
+use Myxa\Database\Attributes\Hook;
+use Myxa\Database\Model\HookEvent;
+
+final class User extends Model
+{
+    #[Hook(HookEvent::BeforeSave)]
+    protected function normalizeEmail(): void
+    {
+        $this->email = strtolower(trim($this->email));
+    }
+
+    #[Hook(HookEvent::AfterSave)]
+    protected function rememberAuditEntry(): void
+    {
+        // custom post-save logic
+    }
+}
+```
+
+Hook methods can live directly on the model, but traits are often the nicest way to keep models small while still attaching the callbacks to the model lifecycle:
+
+```php
+use App\Models\Concerns\UserHooks;
+
+final class User extends Model
+{
+    use UserHooks;
+}
+```
+
+```php
+namespace App\Models\Concerns;
+
+use Myxa\Database\Attributes\Hook;
+use Myxa\Database\Model\HookEvent;
+
+trait UserHooks
+{
+    #[Hook(HookEvent::BeforeSave)]
+    protected function normalizeEmail(): void
+    {
+        $this->email = strtolower(trim($this->email));
+    }
+
+    #[Hook(HookEvent::AfterSave)]
+    protected function rememberAuditEntry(): void
+    {
+        // custom post-save logic
+    }
+}
+```
+
+This works because trait methods become part of the model class, so they are discovered the same way as methods declared directly on the model.
+
+Available hook events:
+
+- `HookEvent::BeforeSave`
+- `HookEvent::AfterSave`
+- `HookEvent::BeforeUpdate`
+- `HookEvent::AfterUpdate`
+- `HookEvent::BeforeDelete`
+- `HookEvent::AfterDelete`
+
+`save()` handles both inserts and updates. For existing models, `save()` will run the save hooks and the update hooks.
 
 ## Querying
 

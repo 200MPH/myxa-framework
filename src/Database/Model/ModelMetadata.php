@@ -8,9 +8,11 @@ use LogicException;
 use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
+use Myxa\Database\Attributes\Hook;
 use Myxa\Database\Attributes\Internal;
 use ReflectionAttribute;
 use ReflectionClass;
+use ReflectionMethod;
 use ReflectionObject;
 use ReflectionProperty;
 
@@ -27,6 +29,9 @@ final class ModelMetadata
 
     /** @var array<class-string, array<string, Cast>> */
     private static array $castPropertyCache = [];
+
+    /** @var array<class-string, array<string, list<ReflectionMethod>>> */
+    private static array $hookMethodCache = [];
 
     public function __construct(private readonly Model $model)
     {
@@ -64,6 +69,14 @@ final class ModelMetadata
     }
 
     /**
+     * @return list<ReflectionMethod>
+     */
+    public function hookMethodsFor(HookEvent $event): array
+    {
+        return $this->hookMethods()[$event->value] ?? [];
+    }
+
+    /**
      * @return array<string, true>
      */
     private function guardedProperties(): array
@@ -77,6 +90,14 @@ final class ModelMetadata
     private function castProperties(): array
     {
         return self::$castPropertyCache[$this->model::class] ??= $this->buildCastPropertyCache();
+    }
+
+    /**
+     * @return array<string, list<ReflectionMethod>>
+     */
+    private function hookMethods(): array
+    {
+        return self::$hookMethodCache[$this->model::class] ??= $this->buildHookMethodCache();
     }
 
     /**
@@ -145,6 +166,44 @@ final class ModelMetadata
         }
 
         return $properties;
+    }
+
+    /**
+     * @return array<string, list<ReflectionMethod>>
+     */
+    private function buildHookMethodCache(): array
+    {
+        $methods = [];
+        $reflection = new ReflectionObject($this->model);
+
+        foreach ($reflection->getMethods() as $method) {
+            if ($method->isStatic()) {
+                continue;
+            }
+
+            $attributes = $method->getAttributes(Hook::class, ReflectionAttribute::IS_INSTANCEOF);
+            if ($attributes === []) {
+                continue;
+            }
+
+            if ($method->getNumberOfRequiredParameters() > 0) {
+                throw new LogicException(sprintf(
+                    'Hook method "%s" on model %s cannot require parameters.',
+                    $method->getName(),
+                    $this->model::class,
+                ));
+            }
+
+            $method->setAccessible(true);
+
+            foreach ($attributes as $attribute) {
+                $hook = $attribute->newInstance();
+                $methods[$hook->event->value] ??= [];
+                $methods[$hook->event->value][] = $method;
+            }
+        }
+
+        return $methods;
     }
 
     private function isInternalProperty(ReflectionProperty $property): bool
