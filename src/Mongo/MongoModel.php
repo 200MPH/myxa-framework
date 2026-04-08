@@ -77,7 +77,10 @@ abstract class MongoModel implements JsonSerializable
     {
         $collection = trim(static::metadata()->collection);
         if ($collection === '') {
-            throw new LogicException(sprintf('Mongo model %s must define a non-empty $collection property.', static::class));
+            throw new LogicException(sprintf(
+                'Mongo model %s must define a non-empty $collection property.',
+                static::class,
+            ));
         }
 
         return $collection;
@@ -87,7 +90,10 @@ abstract class MongoModel implements JsonSerializable
     {
         $primaryKey = trim(static::metadata()->primaryKey);
         if ($primaryKey === '') {
-            throw new LogicException(sprintf('Mongo model %s must define a non-empty $primaryKey property.', static::class));
+            throw new LogicException(sprintf(
+                'Mongo model %s must define a non-empty $primaryKey property.',
+                static::class,
+            ));
         }
 
         return $primaryKey;

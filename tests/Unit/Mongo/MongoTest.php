@@ -30,6 +30,7 @@ final class UserDocument extends MongoModel
 {
     protected string $collection = 'users';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 
     protected string $email = '';
@@ -41,6 +42,7 @@ final class SecureUserDocument extends MongoModel
 {
     protected string $collection = 'users';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 
     protected string $email = '';
@@ -54,6 +56,7 @@ final class CastedUserDocument extends MongoModel
 {
     protected string $collection = 'users';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 
     #[Cast(CastType::DateTimeImmutable, format: DATE_ATOM)]
@@ -66,6 +69,7 @@ final class ConnectedUserDocument extends MongoModel
 
     protected ?string $connection = 'mongo-main';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 
     protected string $email = '';
@@ -75,6 +79,7 @@ final class InvalidCollectionDocument extends MongoModel
 {
     protected string $collection = ' ';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 }
 
@@ -84,6 +89,7 @@ final class InvalidPrimaryKeyDocument extends MongoModel
 
     protected string $primaryKey = ' ';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 }
 
@@ -93,6 +99,7 @@ final class InvalidConnectionDocument extends MongoModel
 
     protected ?string $connection = ' ';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 }
 
@@ -100,6 +107,7 @@ final class ObservedUserDocument extends MongoModel
 {
     protected string $collection = 'users';
 
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
     protected string|int|null $_id = null;
 
     protected string $email = '';

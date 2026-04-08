@@ -25,7 +25,10 @@ final class MongoServiceProvider extends ServiceProvider
         $connections = $this->connections;
         $defaultConnection = $this->defaultConnection;
 
-        $this->app()->singleton(MongoManager::class, static function () use ($connections, $defaultConnection): MongoManager {
+        $this->app()->singleton(MongoManager::class, static function () use (
+            $connections,
+            $defaultConnection,
+        ): MongoManager {
             $manager = new MongoManager($defaultConnection);
 
             foreach ($connections as $alias => $connection) {
