@@ -92,6 +92,38 @@ Available hook events:
 
 `save()` handles both inserts and updates. For existing models, `save()` will run the save hooks and the update hooks.
 
+## Change Tracking
+
+Models keep a lightweight snapshot of their last known persisted state so hooks and application code can inspect diffs.
+
+Available helpers:
+
+- `$model->getOriginal()`
+- `$model->getOriginal('status')`
+- `$model->getDirty()`
+- `$model->isDirty()`
+- `$model->isDirty('status')`
+- `$model->getChanges()`
+- `$model->wasChanged()`
+- `$model->wasChanged('status')`
+
+Example:
+
+```php
+#[Hook(HookEvent::AfterUpdate)]
+protected function auditStatusChange(): void
+{
+    if (!$this->wasChanged('status')) {
+        return;
+    }
+
+    $before = $this->getOriginal('status');
+    $after = $this->getChanges()['status'] ?? null;
+}
+```
+
+During `AfterSave`, `AfterUpdate`, and `AfterDelete` hooks, `getOriginal()` still exposes the pre-write values and `getChanges()` contains the values written or removed by the operation. After the hooks finish, the model syncs its original snapshot to the latest persisted state.
+
 ## Querying
 
 ```php

@@ -196,6 +196,15 @@ final class ObservedUser extends Model
     #[Internal]
     public array $hookLog = [];
 
+    #[Internal]
+    public array $hookOriginal = [];
+
+    #[Internal]
+    public array $hookChanges = [];
+
+    #[Internal]
+    public array $hookDirty = [];
+
     #[Hook(HookEvent::BeforeSave)]
     protected function normalizeEmailBeforeSave(): void
     {
@@ -214,6 +223,8 @@ final class ObservedUser extends Model
     protected function markBeforeUpdate(): void
     {
         $this->hookLog[] = 'before_update';
+        $this->hookOriginal = $this->getOriginal();
+        $this->hookDirty = $this->getDirty();
         $this->status = sprintf('%s:updating', $this->status);
     }
 
@@ -221,6 +232,8 @@ final class ObservedUser extends Model
     protected function markAfterUpdate(): void
     {
         $this->hookLog[] = 'after_update';
+        $this->hookOriginal = $this->getOriginal();
+        $this->hookChanges = $this->getChanges();
     }
 
     #[Hook(HookEvent::BeforeDelete)]
@@ -233,6 +246,8 @@ final class ObservedUser extends Model
     protected function markAfterDelete(): void
     {
         $this->hookLog[] = 'after_delete';
+        $this->hookOriginal = $this->getOriginal();
+        $this->hookChanges = $this->getChanges();
     }
 }
 
@@ -533,6 +548,38 @@ final class ModelTest extends TestCase
         self::assertSame('archived', $user->status);
     }
 
+    public function testModelTracksOriginalDirtyAndChangedAttributes(): void
+    {
+        $created = User::create(['email' => 'dirty@example.com', 'status' => 'draft']);
+        $user = User::findOrFail((int) $created->getKey());
+
+        self::assertSame(
+            [
+                'email' => 'dirty@example.com',
+                'status' => 'draft',
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at,
+                'id' => $user->getKey(),
+            ],
+            $user->getOriginal(),
+        );
+        self::assertFalse($user->isDirty());
+        self::assertFalse($user->wasChanged('status'));
+
+        $user->status = 'published';
+
+        self::assertTrue($user->isDirty());
+        self::assertTrue($user->isDirty('status'));
+        self::assertSame(['status' => 'published'], $user->getDirty());
+
+        self::assertTrue($user->save());
+        self::assertTrue($user->wasChanged());
+        self::assertTrue($user->wasChanged('status'));
+        self::assertSame(['status' => 'published'], $user->getChanges());
+        self::assertSame('published', $user->getOriginal('status'));
+        self::assertFalse($user->isDirty());
+    }
+
     public function testDeleteRemovesPersistedModel(): void
     {
         $user = User::create(['email' => 'delete@example.com', 'status' => 'inactive']);
@@ -723,6 +770,28 @@ final class ModelTest extends TestCase
         self::assertSame('published:updating:saved', $user->status);
         self::assertSame(
             [
+                'email' => 'first@example.com',
+                'status' => 'draft:saved',
+                'id' => $user->getKey(),
+            ],
+            array_intersect_key($user->hookOriginal, array_flip(['id', 'email', 'status'])),
+        );
+        self::assertSame(
+            [
+                'email' => 'second@example.com',
+                'status' => 'published',
+            ],
+            $user->hookDirty,
+        );
+        self::assertSame(
+            [
+                'email' => 'second@example.com',
+                'status' => 'published:updating',
+            ],
+            $user->hookChanges,
+        );
+        self::assertSame(
+            [
                 'email' => 'second@example.com',
                 'status' => 'published:updating',
             ],
@@ -744,6 +813,15 @@ final class ModelTest extends TestCase
 
         self::assertTrue($user->delete());
         self::assertSame(['before_delete', 'after_delete'], $user->hookLog);
+        self::assertSame(
+            [
+                'email' => 'delete-hooks@example.com',
+                'status' => 'draft:saved',
+                'id' => $user->getOriginal('id'),
+            ],
+            array_intersect_key($user->hookOriginal, array_flip(['id', 'email', 'status'])),
+        );
+        self::assertSame($user->hookOriginal, $user->hookChanges);
         self::assertFalse($user->exists());
         self::assertNull($user->getKey());
     }

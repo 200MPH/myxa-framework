@@ -44,6 +44,14 @@ abstract class Model implements JsonSerializable
     #[Internal]
     private bool $readOnly = false;
 
+    /** @var array<string, scalar|null> */
+    #[Internal]
+    private array $original = [];
+
+    /** @var array<string, scalar|null> */
+    #[Internal]
+    private array $changes = [];
+
     /**
      * Create a new model instance and optionally prefill declared attributes.
      *
@@ -184,6 +192,7 @@ abstract class Model implements JsonSerializable
         $model = new static([], $manager ?? static::sharedManager());
         $model->forceFill($attributes);
         $model->exists = true;
+        $model->syncOriginal();
 
         return $model;
     }
@@ -220,6 +229,82 @@ abstract class Model implements JsonSerializable
     public function getKey(): int|string|null
     {
         return $this->getAttribute(static::primaryKey());
+    }
+
+    /**
+     * Return the last known persisted state, or a specific original value.
+     *
+     * @return array<string, scalar|null>|scalar|null
+     */
+    public function getOriginal(?string $key = null): mixed
+    {
+        if ($key === null) {
+            return $this->original;
+        }
+
+        return $this->original[$key] ?? null;
+    }
+
+    /**
+     * Return the attributes changed by the most recent save or delete operation.
+     *
+     * @return array<string, scalar|null>
+     */
+    public function getChanges(): array
+    {
+        return $this->changes;
+    }
+
+    /**
+     * Return the currently unsaved persisted attribute changes.
+     *
+     * @return array<string, scalar|null>
+     */
+    public function getDirty(): array
+    {
+        $dirty = [];
+
+        foreach ($this->currentPersistedState() as $key => $value) {
+            if (!$this->originalValueMatches($key, $value)) {
+                $dirty[$key] = $value;
+            }
+        }
+
+        foreach ($this->original as $key => $value) {
+            if (array_key_exists($key, $dirty) || array_key_exists($key, $this->currentPersistedState())) {
+                continue;
+            }
+
+            $dirty[$key] = null;
+        }
+
+        return $dirty;
+    }
+
+    /**
+     * Determine whether the model has unsaved persisted attribute changes.
+     */
+    public function isDirty(?string $key = null): bool
+    {
+        $dirty = $this->getDirty();
+
+        if ($key === null) {
+            return $dirty !== [];
+        }
+
+        return array_key_exists($key, $dirty);
+    }
+
+    /**
+     * Determine whether the most recent save or delete operation changed persisted attributes.
+     */
+    public function wasChanged(?string $key = null): bool
+    {
+        if ($key === null) {
+            return $this->changes !== [];
+        }
+
+        return array_key_exists($key, $this->changes);
     }
 
     /**
@@ -460,6 +545,8 @@ abstract class Model implements JsonSerializable
                 throw new LogicException('Cannot update a model without any persisted attributes.');
             }
 
+            $changes = $this->diffAttributes($attributes, $this->original);
+
             $query = $this->manager()
                 ->query()
                 ->update(static::table())
@@ -467,8 +554,10 @@ abstract class Model implements JsonSerializable
                 ->where(static::primaryKey(), '=', $key);
 
             $this->manager()->update($query->toSql(), $query->getBindings(), static::connectionName());
+            $this->changes = $changes;
             $this->runHooks(HookEvent::AfterUpdate);
             $this->runHooks(HookEvent::AfterSave);
+            $this->syncOriginal();
 
             return true;
         }
@@ -489,7 +578,9 @@ abstract class Model implements JsonSerializable
         }
 
         $this->exists = true;
+        $this->changes = $this->currentPersistedState();
         $this->runHooks(HookEvent::AfterSave);
+        $this->syncOriginal();
 
         return true;
     }
@@ -509,6 +600,7 @@ abstract class Model implements JsonSerializable
         }
 
         $this->runHooks(HookEvent::BeforeDelete);
+        $this->changes = $this->original;
 
         $query = $this->manager()
             ->query()
@@ -517,6 +609,7 @@ abstract class Model implements JsonSerializable
 
         $deleted = $this->manager()->delete($query->toSql(), $query->getBindings(), static::connectionName());
         if ($deleted < 1) {
+            $this->changes = [];
             return false;
         }
 
@@ -793,6 +886,8 @@ abstract class Model implements JsonSerializable
     private function copyStateFrom(self $model): void
     {
         $this->attributes = $model->attributes;
+        $this->original = $model->original;
+        $this->changes = $model->changes;
         $this->relations = $model->relations;
         $this->exists = $model->exists;
         $this->resolvedManager = $model->resolvedManager;
@@ -817,5 +912,41 @@ abstract class Model implements JsonSerializable
         }
 
         return $value;
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private function currentPersistedState(): array
+    {
+        return $this->filterPersistableAttributes($this->allAttributes());
+    }
+
+    private function syncOriginal(): void
+    {
+        $this->original = $this->currentPersistedState();
+    }
+
+    private function originalValueMatches(string $key, string|int|float|bool|null $value): bool
+    {
+        return array_key_exists($key, $this->original) && $this->original[$key] === $value;
+    }
+
+    /**
+     * @param array<string, scalar|null> $attributes
+     * @param array<string, scalar|null> $original
+     * @return array<string, scalar|null>
+     */
+    private function diffAttributes(array $attributes, array $original): array
+    {
+        $changes = [];
+
+        foreach ($attributes as $key => $value) {
+            if (!array_key_exists($key, $original) || $original[$key] !== $value) {
+                $changes[$key] = $value;
+            }
+        }
+
+        return $changes;
     }
 }
