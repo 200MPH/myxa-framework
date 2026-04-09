@@ -8,6 +8,11 @@ The database layer is split into a few focused parts:
 - [Schema](./Schema/README.md): schema builder, reverse engineering, snapshots, and diffing
 - [Migrations](./Migrations/README.md): migration base class and schema-first workflow
 
+Related, but separate:
+
+- [Mongo](../Mongo/README.md): document collections and Mongo-backed models
+- [Redis](../Redis/README.md): lightweight key-value infrastructure used directly or through cache
+
 The examples below show the basic `DatabaseManager` usage with direct SQL strings. If you prefer fluent query construction, you can build SQL and bindings with [`query()`](./Query/README.md) and then execute them through the same manager methods.
 
 ## Quick Start

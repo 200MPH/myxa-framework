@@ -10,6 +10,7 @@ Inspired by nature. Built for developers. Powered by AI
 Focused package documentation lives next to the relevant source folders:
 
 - [Auth](./src/Auth/README.md)
+- [Cache](./src/Cache/README.md)
 - [Container](./src/Container/README.md)
 - [Console](./src/Console/README.md)
 - [Database Overview](./src/Database/README.md)
@@ -20,11 +21,14 @@ Focused package documentation lives next to the relevant source folders:
 - [Events](./src/Events/README.md)
 - [HTTP](./src/Http/README.md)
 - [Logging](./src/Logging/README.md)
+- [Mongo](./src/Mongo/README.md)
 - [Middleware](./src/Middleware/README.md)
 - [Rate Limiting](./src/RateLimit/README.md)
+- [Redis](./src/Redis/README.md)
 - [Routing](./src/Routing/README.md)
 - [Storage](./src/Storage/README.md)
 - [Support and Facades](./src/Support/README.md)
+- [Validation](./src/Validation/README.md)
 
 ## Docker Setup
 

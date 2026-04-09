@@ -2,6 +2,8 @@
 
 Models are active-record style classes built around declared properties.
 
+For document-backed models with a similar declared-property style, see [Mongo](../../Mongo/README.md).
+
 ## Basic Model
 
 ```php
