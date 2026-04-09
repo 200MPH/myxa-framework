@@ -15,7 +15,21 @@ use Myxa\Auth\AuthServiceProvider;
 $app->register(new AuthServiceProvider());
 ```
 
-## Provide User Resolvers
+`AuthServiceProvider` already registers the built-in auth services as singletons:
+
+- `AuthManager::class`
+- `'auth'`
+- `SessionGuard::class`
+- `BearerTokenGuard::class`
+
+## Override the Default User Resolvers
+
+The provider also registers fallback null resolvers for:
+
+- `BearerTokenResolverInterface::class`
+- `SessionUserResolverInterface::class`
+
+Bind these interfaces only when you want real authentication logic instead of the defaults:
 
 ```php
 use Myxa\Auth\BearerTokenResolverInterface;

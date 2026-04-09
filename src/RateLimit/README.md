@@ -27,7 +27,7 @@ if (!$result->allowed) {
 use Myxa\Support\Facades\Route;
 
 Route::get('/api/users', [UserController::class, 'index'])
-    ->middleware(\Myxa\Middleware\RateLimitMiddleware::for(60, 60, 'api'));
+    ->middleware(\Myxa\Middleware\RateLimitMiddleware::using(60, 60, 'api'));
 ```
 
 ## Notes
