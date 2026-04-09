@@ -21,8 +21,7 @@ $query = DB::query()
     ->orderBy('id', 'DESC')
     ->limit(10);
 
-$sql = $query->toSql();
-$bindings = $query->getBindings();
+$rows = DB::select($query->toSql(), $query->getBindings());
 ```
 
 ## Joins
