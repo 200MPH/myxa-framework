@@ -1,6 +1,6 @@
 {
   "name": "200mph/myxa-framework",
-  "description": "Myxa core framework package",
+  "description": "The core framework package for Myxa, a lightweight and flexible AI-powered PHP framework.",
   "type": "library",
   "license": "MIT",
   "authors": [
