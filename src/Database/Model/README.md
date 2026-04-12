@@ -97,6 +97,83 @@ $first = User::query()->where('status', '=', 'active')->first();
 $exists = User::query()->where('status', '=', 'active')->exists();
 ```
 
+## Factories
+
+Factories are intentionally lightweight. The framework provides the base `Factory`, a small fake data generator, and a `HasFactory` trait. Your app defines the concrete factory class.
+
+For the complete factory workflow, including `raw()`, `make()`, `create()`, `state()`, and the full fake data helper list, see [Factory](../Factory/README.md).
+
+```php
+use Myxa\Database\Factory\Factory;
+use Myxa\Database\Model\HasFactory;
+
+final class User extends Model
+{
+    use HasFactory;
+
+    protected string $table = 'users';
+
+    protected ?int $id = null;
+    protected string $email = '';
+    protected string $status = '';
+
+    protected static function newFactory(): Factory
+    {
+        return UserFactory::new();
+    }
+}
+
+final class UserFactory extends Factory
+{
+    protected function model(): string
+    {
+        return User::class;
+    }
+
+    protected function definition(): array
+    {
+        return [
+            'email' => $this->faker()->unique()->email(),
+            'status' => $this->faker()->choice(['draft', 'active']),
+        ];
+    }
+}
+```
+
+Usage:
+
+```php
+$user = User::factory()->make();
+$persisted = User::factory()->create();
+
+$users = User::factory()
+    ->count(3)
+    ->create();
+
+$admin = User::factory()
+    ->state(['status' => 'admin'])
+    ->create([
+        'email' => 'admin@example.com',
+    ]);
+```
+
+Available fake data helpers include:
+
+- `$this->faker()->string(16)`
+- `$this->faker()->alpha(12)`
+- `$this->faker()->digits(6)`
+- `$this->faker()->number(1, 100)`
+- `$this->faker()->decimal(10, 99, 2)`
+- `$this->faker()->boolean()`
+- `$this->faker()->choice(['draft', 'active'])`
+- `$this->faker()->word()`
+- `$this->faker()->words(3)`
+- `$this->faker()->sentence()`
+- `$this->faker()->paragraph()`
+- `$this->faker()->slug()`
+- `$this->faker()->email()`
+- `$this->faker()->unique()->email()`
+
 ## Guarded, Hidden, and Internal Attributes
 
 ```php
