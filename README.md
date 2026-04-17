@@ -30,6 +30,12 @@ Focused package documentation lives next to the relevant source folders:
 - [Support and Facades](./src/Support/README.md)
 - [Validation](./src/Validation/README.md)
 
+## Install via Composer
+
+```bash
+composer require 200mph/myxa-framework
+```
+
 ## Docker Setup
 
 The repository includes a PHP 8.4 CLI container and a MySQL container.
