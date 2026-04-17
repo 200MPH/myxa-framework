@@ -23,6 +23,7 @@ Focused package documentation lives next to the relevant source folders:
 - [Logging](./src/Logging/README.md)
 - [Mongo](./src/Mongo/README.md)
 - [Middleware](./src/Middleware/README.md)
+- [Queue](./src/Queue/README.md)
 - [Rate Limiting](./src/RateLimit/README.md)
 - [Redis](./src/Redis/README.md)
 - [Routing](./src/Routing/README.md)
