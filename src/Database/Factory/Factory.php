@@ -10,6 +10,8 @@ use Myxa\Database\Model\Model;
 
 /**
  * Small base class for model factories backed by FakeData.
+ *
+ * @phpstan-consistent-constructor
  */
 abstract class Factory
 {
