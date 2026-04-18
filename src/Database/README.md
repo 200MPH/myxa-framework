@@ -5,6 +5,7 @@ The database layer is split into a few focused parts:
 - [Connection](./Connection/README.md): PDO-backed connection configuration and registry
 - [Query Builder](./Query/README.md): fluent query builder with driver-aware SQL grammars
 - [Model](./Model/README.md): active-record style models with declared properties
+- [Factory](./Factory/README.md): lightweight model factories and fake data helpers
 - [Schema](./Schema/README.md): schema builder, reverse engineering, snapshots, and diffing
 - [Migrations](./Migrations/README.md): migration base class and schema-first workflow
 

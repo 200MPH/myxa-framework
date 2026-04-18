@@ -23,12 +23,19 @@ Focused package documentation lives next to the relevant source folders:
 - [Logging](./src/Logging/README.md)
 - [Mongo](./src/Mongo/README.md)
 - [Middleware](./src/Middleware/README.md)
+- [Queue](./src/Queue/README.md)
 - [Rate Limiting](./src/RateLimit/README.md)
 - [Redis](./src/Redis/README.md)
 - [Routing](./src/Routing/README.md)
 - [Storage](./src/Storage/README.md)
 - [Support and Facades](./src/Support/README.md)
 - [Validation](./src/Validation/README.md)
+
+## Install via Composer
+
+```bash
+composer require 200mph/myxa-framework
+```
 
 ## Docker Setup
 
