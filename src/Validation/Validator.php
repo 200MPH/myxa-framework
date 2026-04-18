@@ -38,10 +38,11 @@ final class Validator
     {
         $this->errors = [];
 
-        foreach ($this->fields as $field => $validator) {
-            $errors = $validator->validate($this->data);
-            if ($errors !== []) {
-                $this->errors[$field] = $errors;
+        foreach ($this->fields as $validator) {
+            foreach ($validator->validate($this->data) as $field => $errors) {
+                if ($errors !== []) {
+                    $this->errors[$field] = $errors;
+                }
             }
         }
 
@@ -107,12 +108,37 @@ final class Validator
 
         $validated = [];
 
-        foreach ($this->fields as $field => $validator) {
-            if ($validator->shouldInclude($this->data)) {
-                $validated[$field] = $this->data[$field];
+        foreach ($this->fields as $validator) {
+            foreach ($validator->validatedValues($this->data) as $field => $value) {
+                $this->setValidatedValue($validated, $field, $value);
             }
         }
 
         return $validated;
+    }
+
+    /**
+     * @param array<string, mixed> $validated
+     */
+    private function setValidatedValue(array &$validated, string $field, mixed $value): void
+    {
+        $segments = explode('.', $field);
+        $cursor = &$validated;
+
+        foreach ($segments as $index => $segment) {
+            $isLast = $index === count($segments) - 1;
+
+            if ($isLast) {
+                $cursor[$segment] = $value;
+
+                return;
+            }
+
+            if (!isset($cursor[$segment]) || !is_array($cursor[$segment])) {
+                $cursor[$segment] = [];
+            }
+
+            $cursor = &$cursor[$segment];
+        }
     }
 }
