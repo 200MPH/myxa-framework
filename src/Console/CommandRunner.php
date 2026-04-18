@@ -164,12 +164,22 @@ final class CommandRunner
         $output->output('');
         $output->output('Commands:')->bold();
 
+        $previousGroup = null;
+
         foreach ($this->commands() as $name => $command) {
+            $group = strstr($name, ':', true) ?: $name;
+
+            if ($previousGroup !== null && $group !== $previousGroup) {
+                $output->output('');
+            }
+
             $output->writeRaw(sprintf(
                 '  %s %s',
                 $output->formatStyled(str_pad($name, 18), 'warning'),
                 $command->description(),
             ));
+
+            $previousGroup = $group;
         }
 
         $output->output('');
