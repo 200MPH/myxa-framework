@@ -108,11 +108,19 @@ use Myxa\Database\DatabaseManager;
 use Myxa\Storage\Db\DatabaseStorage;
 use Myxa\Storage\Local\LocalStorage;
 use Myxa\Storage\StorageManager;
+use Myxa\Storage\S3\S3Storage;
 
 $storage = new StorageManager('local');
 
 $storage->addStorage('local', new LocalStorage(__DIR__ . '/storage'));
 $storage->addStorage('db', new DatabaseStorage(manager: new DatabaseManager('main')));
+$storage->addStorage('s3', new S3Storage(
+    bucket: 'my-app-files',
+    region: 'eu-central-1',
+    accessKey: $_ENV['AWS_ACCESS_KEY_ID'],
+    secretKey: $_ENV['AWS_SECRET_ACCESS_KEY'],
+    sessionToken: $_ENV['AWS_SESSION_TOKEN'] ?? null,
+));
 ```
 
 `addStorage()` also accepts a factory closure when you want lazy driver creation.
@@ -122,5 +130,5 @@ $storage->addStorage('db', new DatabaseStorage(manager: new DatabaseManager('mai
 - `StorageManager` works without `StorageServiceProvider`
 - `StorageServiceProvider` registers the shared manager and initializes the facade
 - the facade can also be pointed at a manager manually with `Storage::setManager(...)`
-- local and database-backed storage drivers are available in the framework
+- local, database-backed, and S3-compatible storage drivers are available in the framework
 - `StoredFile` metadata is returned for successful writes and lookups
