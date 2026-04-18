@@ -112,6 +112,35 @@ final class CommandRunnerTest extends TestCase
         self::assertStringContainsString('Greets a user with an optional title.', $contents);
     }
 
+    public function testGlobalHelpSeparatesCommandGroupsWithBlankLines(): void
+    {
+        $input = fopen('php://temp', 'r+');
+        $output = fopen('php://temp', 'w+');
+        $runner = new CommandRunner(new Container(), 'myxa', '1.0.0', $input, $output);
+        $runner->register(new ConsoleTestNamedCommand('cache:clear', 'Clear cache.'));
+        $runner->register(new ConsoleTestNamedCommand('cache:forget', 'Forget cache key.'));
+        $runner->register(new ConsoleTestNamedCommand('make:command', 'Create command.'));
+        $runner->register(new ConsoleTestNamedCommand('migrate', 'Run migrations.'));
+
+        self::assertSame(0, $runner->run(['myxa']));
+
+        rewind($output);
+        $contents = (string) stream_get_contents($output);
+
+        self::assertStringContainsString('cache:clear', $contents);
+        self::assertStringContainsString('cache:forget', $contents);
+        self::assertStringContainsString('make:command', $contents);
+        self::assertStringContainsString('migrate', $contents);
+        self::assertMatchesRegularExpression(
+            '/cache:forget.*\R\R.*make:command/s',
+            $contents,
+        );
+        self::assertMatchesRegularExpression(
+            '/make:command.*\R\R.*migrate/s',
+            $contents,
+        );
+    }
+
     public function testListCommandAliasAndMissingHelpTargetAreHandled(): void
     {
         $input = fopen('php://temp', 'r+');
@@ -414,4 +443,28 @@ final readonly class ConsoleTestDependency
 
 final class ConsoleTestInvalidCommand
 {
+}
+
+final class ConsoleTestNamedCommand extends Command
+{
+    public function __construct(
+        private readonly string $name,
+        private readonly string $description = '',
+    ) {
+    }
+
+    public function name(): string
+    {
+        return $this->name;
+    }
+
+    public function description(): string
+    {
+        return $this->description;
+    }
+
+    protected function handle(): int
+    {
+        return 0;
+    }
 }
