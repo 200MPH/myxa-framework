@@ -107,6 +107,8 @@ Example with multiple drivers:
 use Myxa\Database\DatabaseManager;
 use Myxa\Storage\Db\DatabaseStorage;
 use Myxa\Storage\Local\LocalStorage;
+use Myxa\Storage\Metadata\MetadataTrackingStorage;
+use Myxa\Storage\Metadata\StorageMetadataRepositoryInterface;
 use Myxa\Storage\StorageManager;
 use Myxa\Storage\S3\S3Storage;
 
@@ -125,10 +127,64 @@ $storage->addStorage('s3', new S3Storage(
 
 `addStorage()` also accepts a factory closure when you want lazy driver creation.
 
+## Track Metadata In Your App Database
+
+If you want file contents on `local` or `s3` but still want searchable metadata in your app database,
+wrap the real storage driver with `MetadataTrackingStorage`.
+
+The framework provides:
+
+- `MetadataTrackingStorage`
+- `StorageMetadataRepositoryInterface`
+
+Your app provides the concrete repository implementation for its own schema.
+
+```php
+use Myxa\Storage\Metadata\MetadataTrackingStorage;
+use Myxa\Storage\Metadata\StorageMetadataRepositoryInterface;
+use Myxa\Storage\S3\S3Storage;
+
+final class AppFileMetadataRepository implements StorageMetadataRepositoryInterface
+{
+    public function save(\Myxa\Storage\StoredFile $file): void
+    {
+        // Persist storage/location/name/size/checksum/mime_type/metadata in your DB.
+    }
+
+    public function find(string $storage, string $location): ?\Myxa\Storage\StoredFile
+    {
+        // Rebuild and return a StoredFile from your DB row.
+    }
+
+    public function delete(string $storage, string $location): bool
+    {
+        // Delete the metadata row and return whether one existed.
+    }
+}
+
+$storage->addStorage('uploads', new MetadataTrackingStorage(
+    new S3Storage(
+        bucket: 'my-app-files',
+        region: 'eu-central-1',
+        accessKey: $_ENV['AWS_ACCESS_KEY_ID'],
+        secretKey: $_ENV['AWS_SECRET_ACCESS_KEY'],
+    ),
+    new AppFileMetadataRepository(),
+    'uploads',
+));
+```
+
+With that setup:
+
+- file reads and writes still go to the wrapped storage driver
+- `get()` returns tracked metadata from your repository when available
+- stale metadata is cleaned up automatically if the physical file disappears
+- you keep your DB schema in the consumer app instead of locking the framework to one table shape
+
 ## Notes
 
 - `StorageManager` works without `StorageServiceProvider`
 - `StorageServiceProvider` registers the shared manager and initializes the facade
 - the facade can also be pointed at a manager manually with `Storage::setManager(...)`
-- local, database-backed, and S3-compatible storage drivers are available in the framework
+- local, database-backed, S3-compatible, and metadata-tracking storage drivers are available in the framework
 - `StoredFile` metadata is returned for successful writes and lookups
