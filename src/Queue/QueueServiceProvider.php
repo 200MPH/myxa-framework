@@ -48,8 +48,7 @@ final class QueueServiceProvider extends ServiceProvider
     private function registerShared(
         string $abstract,
         QueueInterface|WorkerInterface|RetryPolicyInterface|Closure|string|null $concrete,
-    ): void
-    {
+    ): void {
         if ($concrete === null) {
             return;
         }
