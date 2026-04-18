@@ -220,59 +220,28 @@ final class FieldValidator
      */
     public function validate(array $data): array
     {
-        $present = array_key_exists($this->field, $data);
-        $value = $present ? $data[$this->field] : null;
+        $resolved = $this->resolveValues($data);
 
-        if (!$present) {
+        if ($resolved === []) {
             return $this->required
-                ? [$this->formatMessage(
-                    $this->requiredMessage,
-                    sprintf('The %s field is required.', $this->field),
-                    null,
-                    $this->field,
-                )]
+                ? [$this->field => [
+                    $this->formatMessage(
+                        $this->requiredMessage,
+                        sprintf('The %s field is required.', $this->field),
+                        null,
+                        $this->field,
+                    ),
+                ]]
                 : [];
-        }
-
-        if ($value === null) {
-            if ($this->nullable) {
-                return [];
-            }
-
-            return $this->required
-                ? [$this->formatMessage(
-                    $this->requiredMessage,
-                    sprintf('The %s field is required.', $this->field),
-                    $value,
-                    $this->field,
-                )]
-                : [];
-        }
-
-        if ($this->required && is_string($value) && trim($value) === '') {
-            return [$this->formatMessage(
-                $this->requiredMessage,
-                sprintf('The %s field is required.', $this->field),
-                $value,
-                $this->field,
-            )];
-        }
-
-        if ($this->required && is_array($value) && $value === []) {
-            return [$this->formatMessage(
-                $this->requiredMessage,
-                sprintf('The %s field is required.', $this->field),
-                $value,
-                $this->field,
-            )];
         }
 
         $errors = [];
 
-        foreach ($this->rules as $rule) {
-            $error = $rule($value, $this->field);
-            if (is_string($error)) {
-                $errors[] = $error;
+        foreach ($resolved as $field => $value) {
+            $fieldErrors = $this->validateValue($value, $field);
+
+            if ($fieldErrors !== []) {
+                $errors[$field] = $fieldErrors;
             }
         }
 
@@ -280,11 +249,13 @@ final class FieldValidator
     }
 
     /**
-     * Determine whether this field should be included in validated output.
+     * Return the resolved values that should be included in validated output.
+     *
+     * @return array<string, mixed>
      */
-    public function shouldInclude(array $data): bool
+    public function validatedValues(array $data): array
     {
-        return array_key_exists($this->field, $data);
+        return $this->resolveValues($data);
     }
 
     private function valueExists(mixed $value, string|array|callable $source, ?string $column): bool
@@ -340,6 +311,105 @@ final class FieldValidator
         }
 
         return $default;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolveValues(array $data): array
+    {
+        return $this->resolveSegments($data, explode('.', $this->field));
+    }
+
+    /**
+     * @param list<string> $segments
+     * @return array<string, mixed>
+     */
+    private function resolveSegments(mixed $value, array $segments, string $path = ''): array
+    {
+        if ($segments === []) {
+            return [$path => $value];
+        }
+
+        $segment = array_shift($segments);
+
+        if ($segment === '*') {
+            if (!is_array($value)) {
+                return [];
+            }
+
+            $resolved = [];
+
+            foreach ($value as $key => $item) {
+                $resolved = array_replace(
+                    $resolved,
+                    $this->resolveSegments($item, $segments, $this->appendPath($path, (string) $key)),
+                );
+            }
+
+            return $resolved;
+        }
+
+        if (!is_array($value) || !array_key_exists($segment, $value)) {
+            return [];
+        }
+
+        return $this->resolveSegments($value[$segment], $segments, $this->appendPath($path, $segment));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function validateValue(mixed $value, string $field): array
+    {
+        if ($value === null) {
+            if ($this->nullable) {
+                return [];
+            }
+
+            return $this->required
+                ? [$this->formatMessage(
+                    $this->requiredMessage,
+                    sprintf('The %s field is required.', $field),
+                    $value,
+                    $field,
+                )]
+                : [];
+        }
+
+        if ($this->required && is_string($value) && trim($value) === '') {
+            return [$this->formatMessage(
+                $this->requiredMessage,
+                sprintf('The %s field is required.', $field),
+                $value,
+                $field,
+            )];
+        }
+
+        if ($this->required && is_array($value) && $value === []) {
+            return [$this->formatMessage(
+                $this->requiredMessage,
+                sprintf('The %s field is required.', $field),
+                $value,
+                $field,
+            )];
+        }
+
+        $errors = [];
+
+        foreach ($this->rules as $rule) {
+            $error = $rule($value, $field);
+            if (is_string($error)) {
+                $errors[] = $error;
+            }
+        }
+
+        return $errors;
+    }
+
+    private function appendPath(string $path, string $segment): string
+    {
+        return $path === '' ? $segment : $path . '.' . $segment;
     }
 
     private static function sizeOf(mixed $value): int|float|null

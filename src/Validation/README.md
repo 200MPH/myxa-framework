@@ -78,6 +78,8 @@ Behavior:
 - missing fields fail only when `required()` is configured
 - `nullable()` allows an explicit `null` value
 - when a field is `null` and `nullable()` is set, the remaining rules for that field are skipped
+- nested fields can be targeted with dot paths such as `user.email`
+- array items can be targeted with `*` wildcards such as `tags.*`
 
 ### Type and Format Rules
 
@@ -98,6 +100,38 @@ The size meaning depends on the value type:
 - strings use string length
 - arrays use item count
 - numeric values use their numeric value
+
+## Nested Fields and Array Items
+
+Use dot notation to validate nested input:
+
+```php
+$validator = (new ValidationManager())->make([
+    'user' => [
+        'name' => 'John',
+        'roles' => ['admin', 'editor'],
+    ],
+]);
+
+$validator->field('user.name')->required()->string()->min(2);
+$validator->field('user.roles')->required()->array()->min(1);
+```
+
+Use `*` to validate each array item:
+
+```php
+$validator->field('user.roles.*')->required()->string()->min(3);
+```
+
+When wildcard validation fails, errors are keyed by the concrete item path:
+
+```php
+[
+    'user.roles.1' => [
+        'The user.roles.1 field must be a string.',
+    ],
+]
+```
 
 ## Exists Validation
 

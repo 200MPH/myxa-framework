@@ -129,6 +129,66 @@ final class ValidationTest extends TestCase
         self::assertTrue($validator->passes());
     }
 
+    public function testNestedFieldsAndWildcardItemsCanBeValidated(): void
+    {
+        $validator = (new ValidationManager())->make([
+            'user' => [
+                'name' => 'John',
+                'roles' => ['admin', 'editor'],
+            ],
+        ]);
+
+        $validator->field('user.name')->required()->string()->min(2);
+        $validator->field('user.roles')->required()->array()->min(1);
+        $validator->field('user.roles.*')->required()->string()->min(3);
+
+        self::assertTrue($validator->passes());
+        self::assertSame([
+            'user' => [
+                'name' => 'John',
+                'roles' => ['admin', 'editor'],
+            ],
+        ], $validator->validated());
+    }
+
+    public function testWildcardValidationReportsConcreteNestedPaths(): void
+    {
+        $validator = (new ValidationManager())->make([
+            'user' => [
+                'roles' => ['admin', 7, ''],
+            ],
+        ]);
+
+        $validator->field('user.roles')->required()->array()->min(1);
+        $validator->field('user.roles.*')->required()->string();
+
+        self::assertTrue($validator->fails());
+        self::assertSame([
+            'user.roles.1' => [
+                'The user.roles.1 field must be a string.',
+            ],
+            'user.roles.2' => [
+                'The user.roles.2 field is required.',
+            ],
+        ], $validator->errors());
+    }
+
+    public function testNestedRequiredFieldUsesFullPathInErrors(): void
+    {
+        $validator = (new ValidationManager())->make([
+            'user' => [],
+        ]);
+
+        $validator->field('user.profile.name')->required()->string();
+
+        self::assertTrue($validator->fails());
+        self::assertSame([
+            'user.profile.name' => [
+                'The user.profile.name field is required.',
+            ],
+        ], $validator->errors());
+    }
+
     public function testRulesSupportCustomMessagesAndCallables(): void
     {
         $validator = (new ValidationManager())->make([
