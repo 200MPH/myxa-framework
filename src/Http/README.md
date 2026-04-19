@@ -53,6 +53,7 @@ $allHeaders = Request::headers();
 
 // Uploaded files and server values
 $avatar = Request::file('avatar');
+$rawAvatar = Request::rawFile('avatar');
 $remoteAddress = Request::server('REMOTE_ADDR');
 ```
 
@@ -80,9 +81,35 @@ $rawBody = Request::content();
 
 Useful notes:
 
-- `Request::query('key', $default)`, `Request::post('key', $default)`, `Request::input('key', $default)`, `Request::cookie('key', $default)`, `Request::file('key', $default)`, and `Request::header('name', $default)` all support a default value.
+- `Request::query('key', $default)`, `Request::post('key', $default)`, `Request::input('key', $default)`, `Request::cookie('key', $default)`, `Request::file('key', $default)`, `Request::rawFile('key', $default)`, and `Request::header('name', $default)` all support a default value.
 - `Request::input()` and `Request::all()` merge query and POST data. When the same key exists in both places, POST wins.
+- `Request::file()` returns `UploadedFile` objects (and nested arrays of `UploadedFile` objects for multi-file inputs), while `Request::rawFile()` returns the original PHP `$_FILES` structure.
 - `Request::expectsJson()` returns `true` for JSON `Accept` or `Content-Type` headers, AJAX requests, and `/api` routes.
+
+Using the request object directly:
+
+```php
+use Myxa\Http\Request;
+
+final class UploadController
+{
+    public function store(Request $request): mixed
+    {
+        $avatar = $request->file('avatar');
+        $rawAvatar = $request->rawFile('avatar');
+        $photos = $request->file('photos', []);
+
+        return [
+            'path' => $request->path(),
+            'stored' => $avatar?->store(),
+            'raw_name' => $rawAvatar['name'] ?? null,
+            'photo_count' => count($photos),
+        ];
+    }
+}
+```
+
+For multi-file inputs, `Request::file('photos')` returns an array of `UploadedFile` objects that you can loop over and store one by one.
 
 ## Response
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Myxa\Http;
 
+use Myxa\Storage\UploadedFile;
+
 /**
  * Lightweight HTTP request object for the current app runtime.
  *
@@ -164,11 +166,29 @@ final class Request
     }
 
     /**
-     * Return an uploaded file entry or the full files array.
+     * Return an uploaded file wrapper or the full normalized uploaded files map.
+     *
+     * @return array<string, mixed>|UploadedFile|mixed
+     */
+    public function file(?string $key = null, mixed $default = null): mixed
+    {
+        if ($key === null) {
+            return $this->normalizeUploadedFiles($this->files);
+        }
+
+        if (!array_key_exists($key, $this->files)) {
+            return $default;
+        }
+
+        return $this->normalizeUploadedFileValue($this->files[$key]);
+    }
+
+    /**
+     * Return a raw PHP `$_FILES` entry or the full files array.
      *
      * @return array<string, mixed>|mixed
      */
-    public function file(?string $key = null, mixed $default = null): mixed
+    public function rawFile(?string $key = null, mixed $default = null): mixed
     {
         return $this->valueFrom($this->files, $key, $default);
     }
@@ -361,6 +381,103 @@ final class Request
         }
 
         return $values[$key] ?? $default;
+    }
+
+    /**
+     * @param array<string, mixed> $files
+     * @return array<string, mixed>
+     */
+    private function normalizeUploadedFiles(array $files): array
+    {
+        $normalized = [];
+
+        foreach ($files as $key => $value) {
+            $normalized[$key] = $this->normalizeUploadedFileValue($value);
+        }
+
+        return $normalized;
+    }
+
+    private function normalizeUploadedFileValue(mixed $value): mixed
+    {
+        if (!is_array($value)) {
+            return $value;
+        }
+
+        if ($this->isUploadedFileArray($value)) {
+            if ($this->hasNestedUploadedFiles($value)) {
+                return $this->normalizeNestedUploadedFiles($value);
+            }
+
+            return UploadedFile::fromArray($value);
+        }
+
+        $normalized = [];
+
+        foreach ($value as $key => $nestedValue) {
+            $normalized[$key] = $this->normalizeUploadedFileValue($nestedValue);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array{name: mixed, type: mixed, size: mixed, tmp_name: mixed, error: mixed} $fileData
+     * @return array<int|string, mixed>
+     */
+    private function normalizeNestedUploadedFiles(array $fileData): array
+    {
+        $keys = [];
+
+        foreach (['name', 'type', 'size', 'tmp_name', 'error'] as $attribute) {
+            if (!is_array($fileData[$attribute])) {
+                continue;
+            }
+
+            foreach (array_keys($fileData[$attribute]) as $key) {
+                $keys[$key] = true;
+            }
+        }
+
+        $normalized = [];
+
+        foreach (array_keys($keys) as $key) {
+            $normalized[$key] = $this->normalizeUploadedFileValue([
+                'name' => is_array($fileData['name']) ? ($fileData['name'][$key] ?? null) : null,
+                'type' => is_array($fileData['type']) ? ($fileData['type'][$key] ?? null) : null,
+                'size' => is_array($fileData['size']) ? ($fileData['size'][$key] ?? null) : null,
+                'tmp_name' => is_array($fileData['tmp_name']) ? ($fileData['tmp_name'][$key] ?? null) : null,
+                'error' => is_array($fileData['error']) ? ($fileData['error'][$key] ?? null) : null,
+            ]);
+        }
+
+        return $normalized;
+    }
+
+    /**
+     * @param array<string, mixed> $value
+     */
+    private function isUploadedFileArray(array $value): bool
+    {
+        $requiredKeys = ['error', 'name', 'size', 'tmp_name', 'type'];
+
+        sort($requiredKeys);
+        $keys = array_keys($value);
+        sort($keys);
+
+        return $keys === $requiredKeys;
+    }
+
+    /**
+     * @param array{name: mixed, type: mixed, size: mixed, tmp_name: mixed, error: mixed} $value
+     */
+    private function hasNestedUploadedFiles(array $value): bool
+    {
+        return is_array($value['name'])
+            || is_array($value['type'])
+            || is_array($value['size'])
+            || is_array($value['tmp_name'])
+            || is_array($value['error']);
     }
 
     /**

@@ -41,7 +41,7 @@
     "test:ci": "vendor/bin/phpunit -c phpunit.xml tests",
     "test:ci:coverage": "vendor/bin/phpunit -c phpunit.xml tests --coverage-clover build/logs/clover.xml --coverage-filter src",
     "test:ci:coverage-check": "php scripts/check-coverage.php build/logs/clover.xml 80",
-    "phpstan": "vendor/bin/phpstan analyse src",
+    "phpstan": "vendor/bin/phpstan analyse src --memory-limit=512M",
     "phpcs": "vendor/bin/phpcs",
     "phpcbf": "vendor/bin/phpcbf",
     "psr": "vendor/bin/phpcs",

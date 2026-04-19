@@ -58,6 +58,61 @@ $exists = Storage::exists('avatars/john.txt');
 
 ## Upload Files
 
+From a request upload object with an injected request:
+
+```php
+use Myxa\Http\Request;
+
+final class ProfileController
+{
+    public function store(Request $request): void
+    {
+        $stored = $request->file('avatar')->store();
+
+        $stored = $request->file('avatar')->store('avatars/john.png', [
+            'metadata' => ['user_id' => 42],
+        ]);
+    }
+}
+```
+
+Storing multiple uploaded files:
+
+```php
+use Myxa\Http\Request;
+
+final class GalleryController
+{
+    public function store(Request $request): array
+    {
+        $storedFiles = [];
+
+        foreach ($request->file('photos', []) as $index => $photo) {
+            $storedFiles[] = $photo->store(sprintf('galleries/photo-%d.%s', $index + 1, $photo->extension()));
+        }
+
+        return $storedFiles;
+    }
+}
+```
+
+From a request upload object with the facade:
+
+```php
+use Myxa\Support\Facades\Request;
+
+$stored = Request::file('avatar')->store();
+
+$stored = Request::file('avatar')->store('avatars/john.png', [
+    'metadata' => ['user_id' => 42],
+]);
+
+$stored = Request::file('avatar')->store(
+    'avatars/john.png',
+    storage: 's3',
+);
+```
+
 With the facade:
 
 ```php
@@ -80,6 +135,9 @@ $stored = $storage->upload(
     ['allowed_extensions' => ['jpg', 'png']],
 );
 ```
+
+`UploadedFile::store()` is the preferred path when you already have a request file object.
+`Storage::upload()` remains available as a convenience wrapper for raw `$_FILES` data or facade-style usage.
 
 ## Named Drivers
 

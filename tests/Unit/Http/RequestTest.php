@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Test\Unit\Http;
 
 use Myxa\Http\Request;
+use Myxa\Storage\UploadedFile;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
@@ -17,7 +18,13 @@ final class RequestTest extends TestCase
             query: ['page' => '2'],
             post: ['search' => 'myxa'],
             cookies: ['session' => 'abc123'],
-            files: ['avatar' => ['name' => 'avatar.png']],
+            files: ['avatar' => [
+                'name' => 'avatar.png',
+                'type' => 'image/png',
+                'size' => 123,
+                'tmp_name' => '/tmp/avatar.png',
+                'error' => 0,
+            ]],
             server: [
                 'REQUEST_METHOD' => 'post',
                 'REQUEST_URI' => '/users/list?page=2',
@@ -40,7 +47,16 @@ final class RequestTest extends TestCase
         self::assertSame('2', $request->input('page'));
         self::assertSame(['page' => '2', 'search' => 'myxa'], $request->all());
         self::assertSame('abc123', $request->cookie('session'));
-        self::assertSame(['name' => 'avatar.png'], $request->file('avatar'));
+        self::assertInstanceOf(UploadedFile::class, $request->file('avatar'));
+        self::assertSame('avatar.png', $request->file('avatar')->name());
+        self::assertSame('/tmp/avatar.png', $request->file('avatar')->tempPath());
+        self::assertSame([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 123,
+            'tmp_name' => '/tmp/avatar.png',
+            'error' => 0,
+        ], $request->rawFile('avatar'));
         self::assertSame('application/json', $request->header('content-type'));
         self::assertSame('XMLHttpRequest', $request->header('X-Requested-With'));
         self::assertTrue($request->ajax());
@@ -104,7 +120,13 @@ final class RequestTest extends TestCase
             query: ['page' => '1'],
             post: ['name' => 'Myxa'],
             cookies: ['theme' => 'forest'],
-            files: ['avatar' => ['name' => 'avatar.png']],
+            files: ['avatar' => [
+                'name' => 'avatar.png',
+                'type' => 'image/png',
+                'size' => 123,
+                'tmp_name' => '/tmp/avatar.png',
+                'error' => 0,
+            ]],
             server: [
                 'REQUEST_METHOD' => 'GET',
                 'REQUEST_URI' => '/profile',
@@ -120,10 +142,19 @@ final class RequestTest extends TestCase
         self::assertSame(['page' => '1'], $request->query());
         self::assertSame(['name' => 'Myxa'], $request->post());
         self::assertSame(['theme' => 'forest'], $request->cookie());
-        self::assertSame(['avatar' => ['name' => 'avatar.png']], $request->file());
+        self::assertInstanceOf(UploadedFile::class, $request->file()['avatar']);
+        self::assertSame('avatar.png', $request->file()['avatar']->name());
+        self::assertSame(['avatar' => [
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 123,
+            'tmp_name' => '/tmp/avatar.png',
+            'error' => 0,
+        ]], $request->rawFile());
         self::assertSame('forest', $request->cookie('theme'));
         self::assertSame('fallback', $request->cookie('missing', 'fallback'));
         self::assertSame('fallback', $request->file('missing', 'fallback'));
+        self::assertSame('fallback', $request->rawFile('missing', 'fallback'));
         self::assertSame('192.168.1.10', $request->server('REMOTE_ADDR'));
         self::assertSame([
             'Accept-Language' => 'en-US',
@@ -135,6 +166,35 @@ final class RequestTest extends TestCase
         self::assertSame('https', $request->scheme());
         self::assertTrue($request->secure());
         self::assertSame(443, $request->port());
+    }
+
+    public function testRequestNormalizesNestedUploadedFiles(): void
+    {
+        $request = new Request(files: [
+            'photos' => [
+                'name' => ['cover.jpg', 'gallery.png'],
+                'type' => ['image/jpeg', 'image/png'],
+                'size' => [100, 200],
+                'tmp_name' => ['/tmp/cover.jpg', '/tmp/gallery.png'],
+                'error' => [0, 0],
+            ],
+        ]);
+
+        $photos = $request->file('photos');
+
+        self::assertIsArray($photos);
+        self::assertCount(2, $photos);
+        self::assertInstanceOf(UploadedFile::class, $photos[0]);
+        self::assertInstanceOf(UploadedFile::class, $photos[1]);
+        self::assertSame('cover.jpg', $photos[0]->name());
+        self::assertSame('gallery.png', $photos[1]->name());
+        self::assertSame([
+            'name' => ['cover.jpg', 'gallery.png'],
+            'type' => ['image/jpeg', 'image/png'],
+            'size' => [100, 200],
+            'tmp_name' => ['/tmp/cover.jpg', '/tmp/gallery.png'],
+            'error' => [0, 0],
+        ], $request->rawFile('photos'));
     }
 
     public function testRequestExtractsBearerTokenWhenAuthorizationHeaderIsPresent(): void
