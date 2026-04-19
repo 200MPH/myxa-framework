@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Myxa\Storage;
 
+use InvalidArgumentException;
 use Myxa\Storage\Exceptions\StorageException;
+use Myxa\Support\Facades\Storage as StorageFacade;
 
 final class UploadedFile
 {
@@ -193,24 +195,34 @@ final class UploadedFile
     }
 
     /**
-     * Persist the upload into a storage driver.
+     * Persist the upload into storage.
+     *
+     * Supports both styles:
+     * - store('avatars/photo.png', ['metadata' => [...]])
+     * - store($storage, 'avatars/photo.png', ['metadata' => [...]])
      *
      * @param array{name?: string, mime_type?: string, metadata?: array<string, mixed>} $options
      */
-    public function store(StorageInterface $storage, ?string $location = null, array $options = []): StoredFile
+    public function store(mixed $location = null, mixed $options = [], mixed $storage = null): StoredFile
     {
         if (!$this->isValid()) {
             throw new StorageException($this->errorMessage());
         }
 
-        $resolvedLocation = $location ?? self::sanitizeFileName($this->name);
+        [$resolvedStorage, $resolvedLocation, $resolvedOptions] = $this->resolveStoreArguments(
+            $location,
+            $options,
+            $storage,
+        );
+
+        $resolvedLocation ??= self::sanitizeFileName($this->name);
         $resolvedOptions = [
-            'name' => $options['name'] ?? $this->name,
-            'mime_type' => $options['mime_type'] ?? $this->type,
-            'metadata' => $options['metadata'] ?? [],
+            'name' => $resolvedOptions['name'] ?? $this->name,
+            'mime_type' => $resolvedOptions['mime_type'] ?? $this->type,
+            'metadata' => $resolvedOptions['metadata'] ?? [],
         ];
 
-        return $storage->put($resolvedLocation, $this->contents(), $resolvedOptions);
+        return $resolvedStorage->put($resolvedLocation, $this->contents(), $resolvedOptions);
     }
 
     /**
@@ -225,5 +237,75 @@ final class UploadedFile
         sort($keys);
 
         return $keys === $requiredKeys;
+    }
+
+    /**
+     * @return array{0: StorageInterface, 1: ?string, 2: array<string, mixed>}
+     */
+    private function resolveStoreArguments(mixed $location, mixed $options, mixed $storage): array
+    {
+        if ($location instanceof StorageInterface) {
+            if (is_array($options) && $storage === null) {
+                return [$location, null, $options];
+            }
+
+            return [
+                $location,
+                $this->normalizeNullableLocation($options),
+                $this->normalizeStoreOptions($storage),
+            ];
+        }
+
+        return [
+            $this->resolveStorage($storage),
+            $this->normalizeNullableLocation($location),
+            $this->normalizeStoreOptions($options),
+        ];
+    }
+
+    private function normalizeNullableLocation(mixed $location): ?string
+    {
+        if ($location === null) {
+            return null;
+        }
+
+        if (!is_string($location)) {
+            throw new InvalidArgumentException('Upload location must be a string or null.');
+        }
+
+        return $location;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizeStoreOptions(mixed $options): array
+    {
+        if ($options === null) {
+            return [];
+        }
+
+        if (!is_array($options)) {
+            throw new InvalidArgumentException('Upload options must be an array.');
+        }
+
+        return $options;
+    }
+
+    private function resolveStorage(mixed $storage): StorageInterface
+    {
+        if ($storage instanceof StorageInterface) {
+            return $storage;
+        }
+
+        if ($storage === null) {
+            return StorageFacade::storage();
+        }
+
+        if (!is_string($storage)) {
+            throw new InvalidArgumentException('Upload storage must be a storage alias, storage instance, or null.');
+        }
+
+        return StorageFacade::storage($storage);
     }
 }

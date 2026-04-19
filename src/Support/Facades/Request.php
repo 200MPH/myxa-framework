@@ -97,11 +97,19 @@ final class Request
     }
 
     /**
-     * Return an uploaded file entry or the full files array.
+     * Return an uploaded file wrapper or the full normalized uploaded files map.
      */
     public static function file(?string $key = null, mixed $default = null): mixed
     {
         return self::getRequest()->file($key, $default);
+    }
+
+    /**
+     * Return a raw PHP `$_FILES` entry or the full files array.
+     */
+    public static function rawFile(?string $key = null, mixed $default = null): mixed
+    {
+        return self::getRequest()->rawFile($key, $default);
     }
 
     /**

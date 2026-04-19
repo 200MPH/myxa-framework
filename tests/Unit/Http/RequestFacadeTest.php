@@ -6,6 +6,7 @@ namespace Test\Unit\Http;
 
 use BadMethodCallException;
 use Myxa\Http\Request as HttpRequest;
+use Myxa\Storage\UploadedFile;
 use Myxa\Support\Facades\Request as RequestFacade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -25,7 +26,13 @@ final class RequestFacadeTest extends TestCase
             query: ['page' => '3'],
             post: ['name' => 'Myxa'],
             cookies: ['theme' => 'forest'],
-            files: ['avatar' => ['name' => 'avatar.png']],
+            files: ['avatar' => [
+                'name' => 'avatar.png',
+                'type' => 'image/png',
+                'size' => 123,
+                'tmp_name' => '/tmp/avatar.png',
+                'error' => 0,
+            ]],
             server: [
                 'REQUEST_METHOD' => 'PATCH',
                 'REQUEST_URI' => '/profile?page=3',
@@ -51,7 +58,15 @@ final class RequestFacadeTest extends TestCase
         self::assertSame('Myxa', RequestFacade::input('name'));
         self::assertSame(['page' => '3', 'name' => 'Myxa'], RequestFacade::all());
         self::assertSame('forest', RequestFacade::cookie('theme'));
-        self::assertSame(['name' => 'avatar.png'], RequestFacade::file('avatar'));
+        self::assertInstanceOf(UploadedFile::class, RequestFacade::file('avatar'));
+        self::assertSame('avatar.png', RequestFacade::file('avatar')->name());
+        self::assertSame([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 123,
+            'tmp_name' => '/tmp/avatar.png',
+            'error' => 0,
+        ], RequestFacade::rawFile('avatar'));
         self::assertSame('PATCH', RequestFacade::server('REQUEST_METHOD'));
         self::assertSame('application/json', RequestFacade::header('content-type'));
         self::assertSame([

@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Test\Unit\Support\Storage;
 
+use Myxa\Support\Facades\Storage as StorageFacade;
 use Myxa\Storage\Local\LocalStorage;
 use Myxa\Storage\Exceptions\StorageException;
+use Myxa\Storage\StorageManager;
 use Myxa\Storage\UploadedFile;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -19,6 +21,9 @@ final class UploadedFileTest extends TestCase
 
     private string $storageRoot;
 
+    /** @var list<string> */
+    private array $storageRoots = [];
+
     protected function setUp(): void
     {
         $this->tempFile = tempnam(sys_get_temp_dir(), 'myxa-upload-');
@@ -29,25 +34,19 @@ final class UploadedFileTest extends TestCase
         }
 
         file_put_contents($this->tempFile, 'avatar-bytes');
+        $this->storageRoots = [$this->storageRoot];
     }
 
     protected function tearDown(): void
     {
+        StorageFacade::clearManager();
+
         if (is_file($this->tempFile)) {
             unlink($this->tempFile);
         }
 
-        if (is_dir($this->storageRoot)) {
-            $items = scandir($this->storageRoot) ?: [];
-            foreach ($items as $item) {
-                if ($item === '.' || $item === '..') {
-                    continue;
-                }
-
-                unlink($this->storageRoot . '/' . $item);
-            }
-
-            rmdir($this->storageRoot);
+        foreach ($this->storageRoots as $storageRoot) {
+            $this->deleteDirectory($storageRoot);
         }
     }
 
@@ -72,6 +71,59 @@ final class UploadedFileTest extends TestCase
         self::assertSame('My_Avatar.png', $stored->location());
         self::assertSame('My Avatar.png', $stored->name());
         self::assertSame('avatar-bytes', $storage->read('My_Avatar.png'));
+    }
+
+    public function testUploadedFileStoresThroughDefaultFacadeStorageWhenNoStorageIsPassed(): void
+    {
+        $manager = new StorageManager('local');
+        $storage = new LocalStorage($this->storageRoot);
+        $manager->addStorage('local', $storage);
+        StorageFacade::setManager($manager);
+
+        $upload = UploadedFile::fromArray([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 12,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ]);
+
+        $stored = $upload->store();
+
+        self::assertSame('local', $stored->storage());
+        self::assertSame('avatar.png', $stored->location());
+        self::assertSame('avatar-bytes', $storage->read('avatar.png'));
+    }
+
+    public function testUploadedFileStoresThroughNamedFacadeStorageAndMetadata(): void
+    {
+        $localRoot = $this->storageRoot . '-local';
+        $remoteRoot = $this->storageRoot . '-remote';
+        $this->storageRoots[] = $localRoot;
+        $this->storageRoots[] = $remoteRoot;
+
+        $manager = new StorageManager('local');
+        $manager->addStorage('local', new LocalStorage($localRoot));
+        $manager->addStorage('remote', new LocalStorage($remoteRoot, 'remote'));
+        StorageFacade::setManager($manager);
+
+        $upload = UploadedFile::fromArray([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 12,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ]);
+
+        $stored = $upload->store(
+            'profiles/me.png',
+            ['metadata' => ['owner' => 'user-1']],
+            'remote',
+        );
+
+        self::assertSame('remote', $stored->storage());
+        self::assertSame('profiles/me.png', $stored->location());
+        self::assertSame('user-1', $stored->metadata('owner'));
     }
 
     public function testUploadedFileRejectsExtensionMismatch(): void
@@ -158,5 +210,31 @@ final class UploadedFileTest extends TestCase
         ));
 
         $invalidRead->contents();
+    }
+
+    private function deleteDirectory(string $directory): void
+    {
+        if (!is_dir($directory)) {
+            return;
+        }
+
+        $items = scandir($directory) ?: [];
+        foreach ($items as $item) {
+            if ($item === '.' || $item === '..') {
+                continue;
+            }
+
+            $path = $directory . '/' . $item;
+
+            if (is_dir($path)) {
+                $this->deleteDirectory($path);
+
+                continue;
+            }
+
+            unlink($path);
+        }
+
+        rmdir($directory);
     }
 }
