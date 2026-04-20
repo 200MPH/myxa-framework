@@ -8,6 +8,7 @@ use DateTime;
 use DateTimeImmutable;
 use DateTimeInterface;
 use InvalidArgumentException;
+use JsonException;
 
 final class ModelValueCaster
 {
@@ -32,6 +33,7 @@ final class ModelValueCaster
                 $cast->format,
                 DateTimeImmutable::class,
             ),
+            CastType::Json => $this->castToJson($name, $value),
         };
     }
 
@@ -44,6 +46,17 @@ final class ModelValueCaster
         $format = $this->metadata->castForProperty($name)?->format ?? DATE_ATOM;
 
         return $value->format($format);
+    }
+
+    public function serializeAttributeForStorage(string $name, mixed $value): mixed
+    {
+        $cast = $this->metadata->castForProperty($name);
+
+        if ($cast?->type === CastType::Json && $value !== null) {
+            return $this->serializeJson($name, $value);
+        }
+
+        return $this->serializeAttributeValue($name, $value);
     }
 
     /**
@@ -104,5 +117,44 @@ final class ModelValueCaster
         }
 
         return $dateTime;
+    }
+
+    private function castToJson(string $name, mixed $value): mixed
+    {
+        if (is_array($value)) {
+            return $value;
+        }
+
+        if (!is_string($value)) {
+            throw new InvalidArgumentException(sprintf(
+                'Cannot cast non-string value for property "%s" on model %s to JSON.',
+                $name,
+                $this->modelClass,
+            ));
+        }
+
+        try {
+            return json_decode($value, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new InvalidArgumentException(sprintf(
+                'Cannot cast value "%s" for property "%s" on model %s to JSON.',
+                $value,
+                $name,
+                $this->modelClass,
+            ));
+        }
+    }
+
+    private function serializeJson(string $name, mixed $value): string
+    {
+        try {
+            return json_encode($value, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new InvalidArgumentException(sprintf(
+                'Cannot serialize value for property "%s" on model %s as JSON.',
+                $name,
+                $this->modelClass,
+            ));
+        }
     }
 }

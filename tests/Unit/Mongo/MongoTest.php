@@ -63,6 +63,17 @@ final class CastedUserDocument extends MongoModel
     protected ?DateTimeImmutable $created_at = null;
 }
 
+final class JsonUserDocument extends MongoModel
+{
+    protected string $collection = 'users';
+
+    // phpcs:ignore PSR2.Classes.PropertyDeclaration.Underscore -- Mongo uses _id as the default document key.
+    protected string|int|null $_id = null;
+
+    #[Cast(CastType::Json)]
+    protected ?array $payload = null;
+}
+
 final class ConnectedUserDocument extends MongoModel
 {
     protected string $collection = 'users';
@@ -375,6 +386,23 @@ final class MongoTest extends TestCase
 
         unset($user->created_at);
         self::assertNull($user->created_at);
+    }
+
+    public function testMongoModelSupportsJsonCastingFromStringsAndArrays(): void
+    {
+        $user = new JsonUserDocument([
+            'payload' => '{"tags":["mongo"],"active":true}',
+        ]);
+
+        self::assertSame(['tags' => ['mongo'], 'active' => true], $user->payload);
+        self::assertSame(['_id' => null, 'payload' => ['tags' => ['mongo'], 'active' => true]], $user->toArray());
+
+        $hydrated = JsonUserDocument::hydrate([
+            '_id' => 'doc-2',
+            'payload' => ['tags' => ['hydrated'], 'active' => false],
+        ]);
+
+        self::assertSame(['tags' => ['hydrated'], 'active' => false], $hydrated->payload);
     }
 
     public function testMongoModelSupportsMakeHydrateAndConnectionMetadata(): void

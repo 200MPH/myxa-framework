@@ -188,6 +188,17 @@ final class SecureUserDocument extends MongoModel
 }
 ```
 
+Cast behavior is the same as SQL models:
+
+- `CastType::DateTime`, `CastType::DateTimeImmutable`, and `CastType::Json` are supported
+- `null` values stay `null`
+- strings are hydrated into datetime objects
+- JSON strings are decoded during hydration when using `CastType::Json`
+- `DateTimeInterface` values are accepted directly
+- serialization writes datetime values back to strings using the declared format, or `DATE_ATOM` when no format is provided
+- JSON-cast attributes remain decoded arrays in serialized model output
+- invalid values throw `InvalidArgumentException`
+
 ### Dirty Tracking and Serialization
 
 `MongoModel` supports the same style of helpers as SQL models:

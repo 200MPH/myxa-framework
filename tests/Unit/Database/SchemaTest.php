@@ -1239,8 +1239,11 @@ final class SchemaTest extends TestCase
         ], [], []), 'App\\Models\\Event');
 
         self::assertStringContainsString('namespace App\\Models;', $source);
+        self::assertStringContainsString('use Myxa\\Database\\Attributes\\Cast;', $source);
+        self::assertStringContainsString('use Myxa\\Database\\Model\\CastType;', $source);
         self::assertStringContainsString('protected ?int $id = null;', $source);
         self::assertStringContainsString('protected bool $is_active = true;', $source);
+        self::assertStringContainsString('#[Cast(CastType::Json)]', $source);
         self::assertStringContainsString('protected ?array $payload = null;', $source);
         self::assertStringContainsString('#[Cast(CastType::DateTimeImmutable)]', $source);
         self::assertStringContainsString('protected ?DateTimeImmutable $published_at = null;', $source);

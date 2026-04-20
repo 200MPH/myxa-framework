@@ -8,4 +8,5 @@ enum CastType: string
 {
     case DateTime = 'datetime';
     case DateTimeImmutable = 'datetime_immutable';
+    case Json = 'json';
 }
