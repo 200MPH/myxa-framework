@@ -32,8 +32,11 @@ final class ModelGenerator
             $imports[] = 'use Myxa\\Database\\Model\\HasTimestamps;';
         }
 
-        if ($this->requiresDateCastImport($table, $usesTimestamps)) {
+        if ($this->requiresDateTypeImport($table, $usesTimestamps)) {
             $imports[] = 'use DateTimeImmutable;';
+        }
+
+        if ($this->requiresCastImport($table, $usesTimestamps)) {
             $imports[] = 'use Myxa\\Database\\Attributes\\Cast;';
             $imports[] = 'use Myxa\\Database\\Model\\CastType;';
         }
@@ -160,7 +163,7 @@ final class ModelGenerator
             && $this->isDateColumn($updatedAt);
     }
 
-    private function requiresDateCastImport(TableSchema $table, bool $usesTimestamps): bool
+    private function requiresDateTypeImport(TableSchema $table, bool $usesTimestamps): bool
     {
         foreach ($table->columns() as $column) {
             if ($usesTimestamps && ($column->name() === 'created_at' || $column->name() === 'updated_at')) {
@@ -168,6 +171,21 @@ final class ModelGenerator
             }
 
             if ($this->isDateColumn($column)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function requiresCastImport(TableSchema $table, bool $usesTimestamps): bool
+    {
+        foreach ($table->columns() as $column) {
+            if ($usesTimestamps && ($column->name() === 'created_at' || $column->name() === 'updated_at')) {
+                continue;
+            }
+
+            if ($this->isDateColumn($column) || $column->type() === 'json') {
                 return true;
             }
         }
@@ -243,11 +261,21 @@ final class ModelGenerator
             ];
         }
 
+        if ($column->type() === 'json') {
+            return [
+                'array',
+                $column->isNullable(),
+                $column->hasDefault()
+                    ? $this->exportDefaultValue($column->defaultValue(), 'array')
+                    : ($column->isNullable() ? 'null' : null),
+                '#[Cast(CastType::Json)]',
+            ];
+        }
+
         $type = match ($column->type()) {
             'integer', 'bigInteger' => 'int',
             'decimal', 'float' => 'float',
             'boolean' => 'bool',
-            'json' => 'array',
             default => 'string',
         };
 

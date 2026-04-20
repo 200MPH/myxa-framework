@@ -204,7 +204,13 @@ final class SecureUser extends Model
 
 ## Casting
 
-The built-in casts currently support datetime values.
+Models support property-level casts through the `#[Cast(...)]` attribute.
+
+The built-in casts currently support these types:
+
+- `CastType::DateTime`
+- `CastType::DateTimeImmutable`
+- `CastType::Json`
 
 ```php
 use DateTimeImmutable;
@@ -229,8 +235,28 @@ final class User extends Model
 Behavior:
 
 - hydrated string values are cast into `DateTime` or `DateTimeImmutable`
-- serialized output converts them back to strings
-- the cast format controls both parsing and serialization
+- JSON strings are decoded during hydration when using `CastType::Json`
+- serialized output converts datetime values back to strings
+- JSON-cast attributes stay decoded in `toArray()` / `toJson()`
+- SQL persistence stores JSON-cast attributes as JSON strings
+- the cast format controls datetime parsing and serialization
+
+```php
+use DateTimeImmutable;
+use Myxa\Database\Attributes\Cast;
+use Myxa\Database\Model\CastType;
+
+final class Event extends Model
+{
+    protected string $table = 'events';
+
+    #[Cast(CastType::DateTimeImmutable, format: DATE_ATOM)]
+    protected ?DateTimeImmutable $published_at = null;
+
+    #[Cast(CastType::Json)]
+    protected ?array $payload = null;
+}
+```
 
 ## Extra Attributes
 

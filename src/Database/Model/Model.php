@@ -781,7 +781,7 @@ abstract class Model implements JsonSerializable
                 $value = $value->value;
             }
 
-            $value = $valueCaster->serializeAttributeValue($key, $value);
+            $value = $valueCaster->serializeAttributeForStorage($key, $value);
 
             if (is_string($value) || is_int($value) || is_float($value) || is_bool($value) || $value === null) {
                 $persisted[$key] = $value;

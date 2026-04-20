@@ -92,6 +92,18 @@ final class CastedUser extends Model
     protected ?DateTimeImmutable $updated_at = null;
 }
 
+final class JsonUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Cast(CastType::Json)]
+    protected ?array $meta = null;
+}
+
 final class InternalPropertyUser extends Model
 {
     protected string $table = 'users';
@@ -538,6 +550,60 @@ final class ModelTest extends TestCase
             'email' => 'broken@example.com',
             'status' => 'active',
             'created_at' => 'not-a-date',
+        ]);
+    }
+
+    public function testJsonCastHydratesToArrayAndSerializesForOutput(): void
+    {
+        $this->makeManager()->insert(
+            'INSERT INTO users (email, status, meta) VALUES (?, ?, ?)',
+            ['json-casted@example.com', 'active', '{"notifications":{"email":true},"tags":["vip","beta"]}'],
+        );
+
+        $user = JsonUser::findOrFail(1);
+
+        self::assertSame(
+            [
+                'notifications' => ['email' => true],
+                'tags' => ['vip', 'beta'],
+            ],
+            $user->meta,
+        );
+        self::assertSame($user->meta, $user->toArray()['meta']);
+        self::assertStringContainsString('"meta":{"notifications":{"email":true},"tags":["vip","beta"]}', $user->toJson());
+    }
+
+    public function testJsonCastPersistsArraysAsJsonStrings(): void
+    {
+        $user = new JsonUser([
+            'email' => 'persist-json@example.com',
+            'status' => 'active',
+            'meta' => [
+                'notifications' => ['email' => true, 'sms' => false],
+                'tags' => ['pro'],
+            ],
+        ]);
+
+        self::assertTrue($user->save());
+        self::assertSame(
+            '{"notifications":{"email":true,"sms":false},"tags":["pro"]}',
+            $this->makeManager()->select('SELECT meta FROM users WHERE id = ?', [$user->getKey()])[0]['meta'],
+        );
+    }
+
+    public function testInvalidJsonCastInputThrowsHelpfulException(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot cast value "%s" for property "meta" on model %s to JSON.',
+            '{invalid',
+            JsonUser::class,
+        ));
+
+        new JsonUser([
+            'email' => 'broken-json@example.com',
+            'status' => 'active',
+            'meta' => '{invalid',
         ]);
     }
 
@@ -1020,6 +1086,7 @@ final class ModelTest extends TestCase
             . 'id INTEGER PRIMARY KEY AUTOINCREMENT, '
             . 'email TEXT NOT NULL, '
             . 'status TEXT NOT NULL, '
+            . 'meta TEXT NULL, '
             . 'password_hash TEXT NULL, '
             . 'created_at TEXT NULL, '
             . 'updated_at TEXT NULL'
