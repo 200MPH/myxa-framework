@@ -190,7 +190,10 @@ final class DatabaseManager
 
         try {
             $result = $callback();
-            $dbConnection->commit();
+
+            if ($dbConnection->getPdo()->inTransaction()) {
+                $dbConnection->commit();
+            }
 
             return $result;
         } catch (Throwable $throwable) {

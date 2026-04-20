@@ -281,6 +281,38 @@ final class DatabaseManagerTest extends TestCase
         )[0]['status']);
     }
 
+    public function testManagerTransactionSkipsCommitWhenTransactionIsAlreadyInactive(): void
+    {
+        $pdo = $this->getMockBuilder(PDO::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['beginTransaction', 'commit', 'inTransaction'])
+            ->getMock();
+        $pdo->expects(self::once())
+            ->method('beginTransaction')
+            ->willReturn(true);
+        $pdo->expects(self::once())
+            ->method('inTransaction')
+            ->willReturn(false);
+        $pdo->expects(self::never())
+            ->method('commit');
+
+        $connection = new PdoConnection(
+            new PdoConnectionConfig(
+                engine: 'mysql',
+                database: 'placeholder',
+                host: '127.0.0.1',
+            ),
+        );
+
+        $pdoProperty = new ReflectionProperty(PdoConnection::class, 'pdo');
+        $pdoProperty->setValue($connection, $pdo);
+
+        $manager = new DatabaseManager(self::CONNECTION_ALIAS);
+        $manager->addConnection(self::CONNECTION_ALIAS, $connection);
+
+        self::assertSame('done', $manager->transaction(static fn (): string => 'done'));
+    }
+
     public function testManagerWrapsPdoFailuresAndRejectsInvalidBindingValues(): void
     {
         $manager = new DatabaseManager(self::CONNECTION_ALIAS);
