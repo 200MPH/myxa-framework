@@ -54,6 +54,26 @@ final class DatabaseManagerTest extends TestCase
         self::assertSame('jane@example.com', $rows[1]['email']);
     }
 
+    public function testManagerStreamsRowsUsingCursor(): void
+    {
+        $manager = new DatabaseManager(self::CONNECTION_ALIAS);
+        $manager->addConnection(self::CONNECTION_ALIAS, $this->makeInMemoryConnection());
+
+        $cursor = $manager->cursor(
+            'SELECT id, email FROM users WHERE status = ? ORDER BY id ASC',
+            ['active'],
+        );
+
+        self::assertInstanceOf(\Generator::class, $cursor);
+
+        $emails = [];
+        foreach ($cursor as $row) {
+            $emails[] = $row['email'];
+        }
+
+        self::assertSame(['john@example.com', 'jane@example.com'], $emails);
+    }
+
     public function testManagerResolvesZeroArgumentConnectionFactory(): void
     {
         $manager = new DatabaseManager(self::CONNECTION_ALIAS);

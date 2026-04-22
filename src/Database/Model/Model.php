@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Database\Model;
 
 use InvalidArgumentException;
+use Generator;
 use JsonSerializable;
 use JsonException;
 use LogicException;
@@ -164,6 +165,28 @@ abstract class Model implements JsonSerializable
         return static::newQuery()
             ->limit($limit, $offset)
             ->get();
+    }
+
+    /**
+     * Stream model records one at a time with optional pagination.
+     *
+     * @return Generator<int, static, void, void>
+     */
+    public static function cursor(?int $limit = null, int $offset = 0): Generator
+    {
+        return static::newQuery()
+            ->limit($limit, $offset)
+            ->cursor();
+    }
+
+    /**
+     * Process model records in fixed-size batches.
+     *
+     * @param callable(list<static>, int): (bool|null) $callback
+     */
+    public static function chunk(int $size, callable $callback): bool
+    {
+        return static::newQuery()->chunk($size, $callback);
     }
 
     /**

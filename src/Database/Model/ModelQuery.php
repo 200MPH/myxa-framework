@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Database\Model;
 
 use Closure;
+use Generator;
 use InvalidArgumentException;
 use Myxa\Database\DatabaseManager;
 use Myxa\Database\Model\Exceptions\ModelNotFoundException;
@@ -124,7 +125,62 @@ class ModelQuery
      */
     public function get(): array
     {
-        $rows = $this->manager->select($this->query->toSql(), $this->query->getBindings(), $this->connection);
+        return $this->getUsingQuery($this->query);
+    }
+
+    /**
+     * @return Generator<int, Model, void, void>
+     */
+    public function cursor(): Generator
+    {
+        $rows = $this->manager->cursor($this->query->toSql(), $this->query->getBindings(), $this->connection);
+
+        foreach ($rows as $row) {
+            $model = $this->hydrateRow($row);
+            $this->eagerLoadRelations([$model]);
+
+            yield $model;
+        }
+    }
+
+    /**
+     * @param callable(list<Model>, int): (bool|null) $callback
+     */
+    public function chunk(int $size, callable $callback): bool
+    {
+        if ($size < 1) {
+            throw new InvalidArgumentException('Chunk size must be greater than 0.');
+        }
+
+        $offset = 0;
+        $page = 1;
+
+        do {
+            $query = clone $this->query;
+            $query->limit($size, $offset);
+
+            $models = $this->getUsingQuery($query);
+            if ($models === []) {
+                return true;
+            }
+
+            if ($callback($models, $page) === false) {
+                return false;
+            }
+
+            $offset += $size;
+            $page++;
+        } while (count($models) === $size);
+
+        return true;
+    }
+
+    /**
+     * @return list<Model>
+     */
+    private function getUsingQuery(QueryBuilder $query): array
+    {
+        $rows = $this->manager->select($query->toSql(), $query->getBindings(), $this->connection);
         $models = array_map(
             fn (array $row): Model => $this->hydrateRow($row),
             $rows,

@@ -1045,6 +1045,83 @@ final class ModelTest extends TestCase
         self::assertSame('helper-a@example.com', $query->firstOrFail()->email);
     }
 
+    public function testModelQueryCursorStreamsHydratedModels(): void
+    {
+        User::create(['email' => 'cursor-a@example.com', 'status' => 'active']);
+        User::create(['email' => 'cursor-b@example.com', 'status' => 'pending']);
+        User::create(['email' => 'cursor-c@example.com', 'status' => 'active']);
+
+        $cursor = User::query()
+            ->where('status', '=', 'active')
+            ->orderBy('id')
+            ->cursor();
+
+        self::assertInstanceOf(\Generator::class, $cursor);
+
+        $emails = [];
+        foreach ($cursor as $user) {
+            self::assertInstanceOf(User::class, $user);
+            $emails[] = $user->email;
+        }
+
+        self::assertSame(['cursor-a@example.com', 'cursor-c@example.com'], $emails);
+
+        $limited = [];
+        foreach (User::cursor(limit: 1) as $user) {
+            $limited[] = $user->email;
+        }
+
+        self::assertSame(['cursor-a@example.com'], $limited);
+    }
+
+    public function testModelQueryChunksHydratedModelsAndCanStopEarly(): void
+    {
+        foreach (range(1, 5) as $index) {
+            User::create([
+                'email' => sprintf('chunk-%d@example.com', $index),
+                'status' => 'active',
+            ]);
+        }
+
+        $chunks = [];
+        $completed = User::query()
+            ->orderBy('id')
+            ->chunk(2, function (array $users, int $page) use (&$chunks): void {
+                $chunks[] = [
+                    'page' => $page,
+                    'emails' => array_map(static fn ($user): string => $user->email, $users),
+                ];
+            });
+
+        self::assertTrue($completed);
+        self::assertSame(
+            [
+                ['page' => 1, 'emails' => ['chunk-1@example.com', 'chunk-2@example.com']],
+                ['page' => 2, 'emails' => ['chunk-3@example.com', 'chunk-4@example.com']],
+                ['page' => 3, 'emails' => ['chunk-5@example.com']],
+            ],
+            $chunks,
+        );
+
+        $visitedPages = [];
+        $stopped = User::chunk(2, function (array $users, int $page) use (&$visitedPages): bool {
+            $visitedPages[] = $page;
+
+            return false;
+        });
+
+        self::assertFalse($stopped);
+        self::assertSame([1], $visitedPages);
+    }
+
+    public function testModelQueryChunkRejectsInvalidSize(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Chunk size must be greater than 0.');
+
+        User::query()->chunk(0, static fn (array $users): null => null);
+    }
+
     public function testModelQueryRejectsMissingAndInvalidRelationsDuringEagerLoading(): void
     {
         User::create(['email' => 'relations-missing@example.com', 'status' => 'active']);
