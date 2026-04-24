@@ -126,12 +126,22 @@ Other helpers:
 
 ```php
 use Myxa\Support\Facades\Response;
+use Myxa\Http\StreamWriterInterface;
 
 Response::text('Created', 201);
 Response::html('<h1>Hello</h1>');
+Response::streaming(function (StreamWriterInterface $stream): void {
+    $stream->write("event: ping\n");
+    $stream->write('data: {"ok":true}' . "\n\n");
+}, 200, [
+    'Content-Type' => 'text/event-stream',
+    'X-Accel-Buffering' => 'no',
+]);
 Response::redirect('/login');
 Response::noContent();
 ```
+
+`Response::streaming()` is generic. It sends headers and cookies as usual, then runs the callback with a `StreamWriterInterface` so you can write chunks to the client without repeating `ob_flush()` and `flush()` by hand. It does not set a default `Content-Type` or `X-Accel-Buffering` header automatically, because those depend on what you are streaming, such as SSE, NDJSON, CSV, or plain text.
 
 Headers and cookies can be chained onto the response:
 

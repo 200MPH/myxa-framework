@@ -21,6 +21,11 @@ final class Response
     private string $content = '';
 
     /**
+     * @var callable|null
+     */
+    private $streamCallback = null;
+
+    /**
      * @var array<string, array{name: string, value: string}>
      */
     private array $headers = [];
@@ -78,6 +83,7 @@ final class Response
      */
     public function body(string $content): self
     {
+        $this->streamCallback = null;
         $this->content = $content;
 
         return $this;
@@ -88,6 +94,7 @@ final class Response
      */
     public function append(string $content): self
     {
+        $this->streamCallback = null;
         $this->content .= $content;
 
         return $this;
@@ -99,6 +106,34 @@ final class Response
     public function content(): string
     {
         return $this->content;
+    }
+
+    /**
+     * Configure the response to stream content when sent.
+     *
+     * @param callable(StreamWriterInterface): void $callback
+     * @param array<string, scalar|null> $headers
+     */
+    public function streaming(callable $callback, int $statusCode = 200, array $headers = []): self
+    {
+        $this->status($statusCode);
+        $this->streamCallback = $callback;
+        $this->content = '';
+        $this->removeHeader('Content-Length');
+
+        foreach ($headers as $name => $value) {
+            $this->setHeader($name, (string) $value);
+        }
+
+        return $this;
+    }
+
+    /**
+     * Determine whether the response is configured for streaming output.
+     */
+    public function isStreaming(): bool
+    {
+        return is_callable($this->streamCallback);
     }
 
     /**
@@ -313,6 +348,12 @@ final class Response
 
                 setcookie($name, $cookie['value'], $options);
             }
+        }
+
+        if ($this->streamCallback !== null) {
+            ($this->streamCallback)(new StreamWriter());
+
+            return;
         }
 
         echo $this->content;
