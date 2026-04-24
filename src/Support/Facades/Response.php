@@ -80,6 +80,17 @@ final class Response
     }
 
     /**
+     * Configure the response to stream content when sent.
+     *
+     * @param callable(\Myxa\Http\StreamWriterInterface): void $callback
+     * @param array<string, scalar|null> $headers
+     */
+    public static function streaming(callable $callback, int $statusCode = 200, array $headers = []): HttpResponse
+    {
+        return self::getResponse()->streaming($callback, $statusCode, $headers);
+    }
+
+    /**
      * Set or replace a response header value.
      */
     public static function setHeader(string $name, string $value): HttpResponse

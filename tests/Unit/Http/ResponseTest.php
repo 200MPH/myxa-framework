@@ -7,10 +7,13 @@ namespace Test\Unit\Http;
 use InvalidArgumentException;
 use JsonException;
 use Myxa\Http\Response;
+use Myxa\Http\StreamWriter;
+use Myxa\Http\StreamWriterInterface;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(Response::class)]
+#[CoversClass(StreamWriter::class)]
 final class ResponseTest extends TestCase
 {
     public function testResponseTracksStatusHeadersAndBody(): void
@@ -120,6 +123,76 @@ final class ResponseTest extends TestCase
         if (function_exists('header_remove')) {
             header_remove();
         }
+    }
+
+    public function testResponseCanStreamContentWhenSent(): void
+    {
+        $response = (new Response('stale'))
+            ->setHeader('Content-Length', '999')
+            ->streaming(static function (StreamWriterInterface $stream): void {
+                $stream->write('chunk-1');
+                $stream->write('chunk-2');
+            }, 206, [
+                'Content-Type' => 'text/event-stream',
+                'X-Accel-Buffering' => 'no',
+            ]);
+
+        self::assertTrue($response->isStreaming());
+        self::assertSame(206, $response->statusCode());
+        self::assertSame('', $response->content());
+        self::assertFalse($response->hasHeader('Content-Length'));
+        self::assertSame('text/event-stream', $response->header('content-type'));
+        self::assertSame('no', $response->header('x-accel-buffering'));
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+
+        ob_start();
+        ob_start();
+        $response->send();
+        ob_end_clean();
+        $output = ob_get_clean();
+
+        self::assertSame('chunk-1chunk-2', $output);
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+    }
+
+    public function testBodySwitchesResponseBackFromStreamingMode(): void
+    {
+        $response = (new Response())
+            ->streaming(static function (StreamWriterInterface $stream): void {
+                $stream->write('stream');
+            })
+            ->body('plain');
+
+        self::assertFalse($response->isStreaming());
+
+        ob_start();
+        $response->send();
+        $output = ob_get_clean();
+
+        self::assertSame('plain', $output);
+    }
+
+    public function testStreamWriterCanBeFlushedExplicitly(): void
+    {
+        $response = (new Response())
+            ->streaming(static function (StreamWriterInterface $stream): void {
+                $stream->flush();
+                $stream->write('chunk');
+            });
+
+        ob_start();
+        ob_start();
+        $response->send();
+        ob_end_clean();
+        $output = ob_get_clean();
+
+        self::assertSame('chunk', $output);
     }
 
     public function testResponseRejectsInvalidStatusCode(): void

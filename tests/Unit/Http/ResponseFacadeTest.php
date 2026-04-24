@@ -7,6 +7,7 @@ namespace Test\Unit\Http;
 use BadMethodCallException;
 use JsonException;
 use Myxa\Http\Response as HttpResponse;
+use Myxa\Http\StreamWriterInterface;
 use Myxa\Support\Facades\Response as ResponseFacade;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
@@ -93,6 +94,40 @@ final class ResponseFacadeTest extends TestCase
         $output = ob_get_clean();
 
         self::assertSame('sent', $output);
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+    }
+
+    public function testFacadeSupportsStreamingResponses(): void
+    {
+        $response = new HttpResponse();
+
+        ResponseFacade::setResponse($response);
+        ResponseFacade::streaming(static function (StreamWriterInterface $stream): void {
+            $stream->write('hello');
+            $stream->write(' world');
+        }, 202, [
+            'Content-Type' => 'text/plain; charset=UTF-8',
+        ]);
+
+        self::assertSame($response, ResponseFacade::getResponse());
+        self::assertTrue($response->isStreaming());
+        self::assertSame(202, ResponseFacade::statusCode());
+        self::assertSame('text/plain; charset=UTF-8', ResponseFacade::header('content-type'));
+
+        if (function_exists('header_remove')) {
+            header_remove();
+        }
+
+        ob_start();
+        ob_start();
+        ResponseFacade::send();
+        ob_end_clean();
+        $output = ob_get_clean();
+
+        self::assertSame('hello world', $output);
 
         if (function_exists('header_remove')) {
             header_remove();
