@@ -226,6 +226,36 @@ final class ValidationTest extends TestCase
         ], $validator->errors());
     }
 
+    public function testAdditionalPrimitiveRulesAndRequiredEdgeCases(): void
+    {
+        $validator = (new ValidationManager())->make([
+            'age' => 'not-number',
+            'active' => 'yes',
+            'empty_array' => [],
+            'nullable' => null,
+            'optional' => null,
+            'items' => 'not-array',
+            'score' => 4.5,
+        ]);
+
+        $validator->field('age')->numeric();
+        $validator->field('active')->boolean();
+        $validator->field('empty_array')->required();
+        $validator->field('nullable')->nullable()->string();
+        $validator->field('optional')->string();
+        $validator->field('items.*')->required()->string();
+        $validator->field('score')->min(5)->max(10);
+
+        self::assertTrue($validator->fails());
+        self::assertSame([
+            'age' => ['The age field must be numeric.'],
+            'active' => ['The active field must be a boolean.'],
+            'empty_array' => ['The empty_array field is required.'],
+            'items.*' => ['The items.* field is required.'],
+            'score' => ['The score field must be at least 5.'],
+        ], $validator->errors());
+    }
+
     public function testExistsRejectsUnsupportedSources(): void
     {
         $validator = (new ValidationManager())->make(['user_id' => 1]);
@@ -233,6 +263,17 @@ final class ValidationTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Validation source [Unknown\\Model] is not supported.');
+
+        $validator->passes();
+    }
+
+    public function testExistsRejectsUnsupportedExistingClasses(): void
+    {
+        $validator = (new ValidationManager())->make(['user_id' => 1]);
+        $validator->field('user_id')->exists(\stdClass::class);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf('Validation source [%s] is not supported.', \stdClass::class));
 
         $validator->passes();
     }

@@ -27,6 +27,7 @@ use Myxa\Database\Schema\ReverseEngineering\ForeignKeySchema as ReverseForeignKe
 use Myxa\Database\Schema\ReverseEngineering\IndexSchema as ReverseIndexSchema;
 use Myxa\Database\Schema\ReverseEngineering\BlueprintTableSchemaFactory;
 use Myxa\Database\Schema\ReverseEngineering\Inspector\MysqlSchemaInspector;
+use Myxa\Database\Schema\ReverseEngineering\Inspector\PostgresSchemaInspector;
 use Myxa\Database\Schema\ReverseEngineering\ModelGenerator;
 use Myxa\Database\Schema\ReverseEngineering\ReverseEngineer;
 use Myxa\Database\Schema\ReverseEngineering\SchemaSnapshot;
@@ -115,6 +116,7 @@ final class ExposedSchemaInspector extends AbstractSchemaInspector
 #[CoversClass(ReverseIndexSchema::class)]
 #[CoversClass(BlueprintTableSchemaFactory::class)]
 #[CoversClass(MysqlSchemaInspector::class)]
+#[CoversClass(PostgresSchemaInspector::class)]
 #[CoversClass(ModelGenerator::class)]
 #[CoversClass(SqliteSchemaInspector::class)]
 #[CoversClass(ReverseEngineer::class)]
@@ -876,6 +878,7 @@ final class SchemaTest extends TestCase
     {
         $create = Blueprint::create('posts');
         $create->id();
+        $create->integer('views');
         $create->bigInteger('user_id');
         $create->string('title')->unique();
         $create->json('meta')->nullable();
@@ -892,7 +895,7 @@ final class SchemaTest extends TestCase
 
         self::assertSame(
             [
-                'CREATE TABLE [posts] ([id] BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY, [user_id] BIGINT NOT NULL, [title] NVARCHAR(255) NOT NULL, [meta] NVARCHAR(MAX) NULL, [published_at] DATETIME2 NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT [posts_user_id_foreign] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) ON DELETE CASCADE)',
+                'CREATE TABLE [posts] ([id] BIGINT NOT NULL IDENTITY(1,1) PRIMARY KEY, [views] INT NOT NULL, [user_id] BIGINT NOT NULL, [title] NVARCHAR(255) NOT NULL, [meta] NVARCHAR(MAX) NULL, [published_at] DATETIME2 NULL DEFAULT CURRENT_TIMESTAMP, CONSTRAINT [posts_user_id_foreign] FOREIGN KEY ([user_id]) REFERENCES [users] ([id]) ON DELETE CASCADE)',
                 'CREATE UNIQUE INDEX [posts_title_unique] ON [posts] ([title])',
             ],
             $grammar->compileCreate($create),
@@ -913,6 +916,7 @@ final class SchemaTest extends TestCase
             "IF OBJECT_ID(N'posts', N'U') IS NOT NULL DROP TABLE [posts]",
             $grammar->compileDrop('posts', true),
         );
+        self::assertSame('DROP TABLE [posts]', $grammar->compileDrop('posts'));
         self::assertSame(
             "EXEC sp_rename N'posts', N'archived_posts'",
             $grammar->compileRename('posts', 'archived_posts'),
@@ -925,6 +929,33 @@ final class SchemaTest extends TestCase
             'ALTER TABLE [posts] DROP CONSTRAINT [posts_user_id_foreign]',
             $grammar->compileDropForeign('posts', 'posts_user_id_foreign'),
         );
+    }
+
+    public function testSchemaGrammarCoversPrimaryConstraintsRawStatementsAndDefaultValues(): void
+    {
+        $create = Blueprint::create('settings');
+        $create->integer('id');
+        $create->string('name')->default("app's name");
+        $create->integer('count')->default(5);
+        $create->decimal('ratio')->default(1.25);
+        $create->boolean('enabled')->default(true);
+        $create->boolean('disabled')->default(false);
+        $create->string('optional')->nullable()->default(null);
+        $create->timestamp('created_at')->default(new RawExpression('CURRENT_TIMESTAMP'));
+        $create->primary(['id']);
+        $create->raw('ANALYZE settings');
+
+        $sql = (new MysqlSchemaGrammar())->compileCreate($create);
+
+        self::assertStringContainsString('PRIMARY KEY (`id`)', $sql[0]);
+        self::assertStringContainsString("DEFAULT 'app''s name'", $sql[0]);
+        self::assertStringContainsString('DEFAULT 5', $sql[0]);
+        self::assertStringContainsString('DEFAULT 1.25', $sql[0]);
+        self::assertStringContainsString('DEFAULT 1', $sql[0]);
+        self::assertStringContainsString('DEFAULT 0', $sql[0]);
+        self::assertStringContainsString('DEFAULT NULL', $sql[0]);
+        self::assertStringContainsString('DEFAULT CURRENT_TIMESTAMP', $sql[0]);
+        self::assertSame('ANALYZE settings', $sql[1]);
     }
 
     public function testSchemaInspectorHelpersNormalizeTypesDefaultsAndErrors(): void
@@ -964,6 +995,64 @@ final class SchemaTest extends TestCase
         } catch (InvalidArgumentException $exception) {
             self::assertSame('Unsupported default value returned from schema inspector.', $exception->getMessage());
         }
+    }
+
+    public function testMysqlSchemaInspectorParsesInformationSchemaRows(): void
+    {
+        $manager = new DatabaseManager('mysql-inspector');
+        $manager->addConnection('mysql-inspector', $this->makeMysqlInspectorConnection());
+        $inspector = new MysqlSchemaInspector($manager, 'mysql-inspector');
+
+        $table = $inspector->table('posts');
+
+        self::assertSame(['posts', 'users'], $inspector->tables());
+        self::assertSame('posts', $table->name());
+        self::assertSame(['id', 'user_id', 'title', 'score'], array_map(
+            static fn (ColumnSchema $column): string => $column->name(),
+            $table->columns(),
+        ));
+        self::assertSame('bigInteger', $table->columns()[0]->type());
+        self::assertTrue($table->columns()[0]->isAutoIncrement());
+        self::assertTrue($table->columns()[0]->isPrimary());
+        self::assertTrue($table->columns()[1]->isUnsigned());
+        self::assertSame('decimal', $table->columns()[3]->type());
+        self::assertSame(9, $table->columns()[3]->option('precision'));
+        self::assertSame(3, $table->columns()[3]->option('scale'));
+        self::assertSame(ReverseIndexSchema::TYPE_PRIMARY, $table->indexes()[0]->type());
+        self::assertSame(ReverseIndexSchema::TYPE_UNIQUE, $table->indexes()[1]->type());
+        self::assertSame('users', $table->foreignKeys()[0]->referencedTable());
+        self::assertSame(['user_id'], $table->foreignKeys()[0]->columns());
+        self::assertSame(['id'], $table->foreignKeys()[0]->referencedColumns());
+        self::assertSame('CASCADE', $table->foreignKeys()[0]->onDelete());
+        self::assertSame('RESTRICT', $table->foreignKeys()[0]->onUpdate());
+    }
+
+    public function testPostgresSchemaInspectorParsesInformationSchemaRows(): void
+    {
+        $manager = new DatabaseManager('pgsql-inspector');
+        $manager->addConnection('pgsql-inspector', $this->makePostgresInspectorConnection());
+        $inspector = new PostgresSchemaInspector($manager, 'pgsql-inspector');
+
+        $table = $inspector->table('posts');
+
+        self::assertSame(['posts', 'users'], $inspector->tables());
+        self::assertSame('posts', $table->name());
+        self::assertSame(['id', 'user_id', 'title'], array_map(
+            static fn (ColumnSchema $column): string => $column->name(),
+            $table->columns(),
+        ));
+        self::assertSame('bigInteger', $table->columns()[0]->type());
+        self::assertTrue($table->columns()[0]->isAutoIncrement());
+        self::assertTrue($table->columns()[0]->isPrimary());
+        self::assertSame(ReverseIndexSchema::TYPE_PRIMARY, $table->indexes()[0]->type());
+        self::assertSame(['1'], $table->indexes()[0]->columns());
+        self::assertSame(ReverseIndexSchema::TYPE_INDEX, $table->indexes()[1]->type());
+        self::assertSame(['title'], $table->indexes()[1]->columns());
+        self::assertSame('users', $table->foreignKeys()[0]->referencedTable());
+        self::assertSame(['1'], $table->foreignKeys()[0]->columns());
+        self::assertSame(['1'], $table->foreignKeys()[0]->referencedColumns());
+        self::assertSame('CASCADE', $table->foreignKeys()[0]->onDelete());
+        self::assertSame('NO ACTION', $table->foreignKeys()[0]->onUpdate());
     }
 
     public function testSqliteInspectorReadsTablesColumnsIndexesAndForeignKeys(): void
@@ -1431,6 +1520,176 @@ final class SchemaTest extends TestCase
         return PdoConnection::get(self::CONNECTION_ALIAS)->getPdo();
     }
 
+    private function makeMysqlInspectorConnection(): PdoConnection
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->sqliteCreateFunction('DATABASE', static fn (): string => 'app');
+        $pdo->exec("ATTACH DATABASE ':memory:' AS information_schema");
+        $pdo->exec(
+            'CREATE TABLE information_schema.columns ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, COLUMN_NAME TEXT, COLUMN_TYPE TEXT, DATA_TYPE TEXT, '
+            . 'IS_NULLABLE TEXT, COLUMN_DEFAULT TEXT NULL, EXTRA TEXT, COLUMN_KEY TEXT, '
+            . 'CHARACTER_MAXIMUM_LENGTH INTEGER NULL, NUMERIC_PRECISION INTEGER NULL, NUMERIC_SCALE INTEGER NULL, '
+            . 'ORDINAL_POSITION INTEGER'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.statistics ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, INDEX_NAME TEXT, NON_UNIQUE INTEGER, '
+            . 'COLUMN_NAME TEXT, SEQ_IN_INDEX INTEGER'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.key_column_usage ('
+            . 'CONSTRAINT_SCHEMA TEXT, TABLE_SCHEMA TEXT, TABLE_NAME TEXT, CONSTRAINT_NAME TEXT, COLUMN_NAME TEXT, '
+            . 'REFERENCED_TABLE_NAME TEXT NULL, REFERENCED_COLUMN_NAME TEXT NULL, ORDINAL_POSITION INTEGER'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.referential_constraints ('
+            . 'CONSTRAINT_SCHEMA TEXT, CONSTRAINT_NAME TEXT, UPDATE_RULE TEXT, DELETE_RULE TEXT'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.tables ('
+            . 'TABLE_SCHEMA TEXT, TABLE_NAME TEXT, TABLE_TYPE TEXT'
+            . ')',
+        );
+
+        $pdo->exec(
+            "INSERT INTO information_schema.tables VALUES "
+            . "('app', 'posts', 'BASE TABLE'), ('app', 'users', 'BASE TABLE')",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.columns VALUES "
+            . "('app', 'posts', 'id', 'bigint unsigned', 'bigint', 'NO', NULL, 'auto_increment', 'PRI', NULL, 20, 0, 1), "
+            . "('app', 'posts', 'user_id', 'bigint unsigned', 'bigint', 'NO', NULL, '', '', NULL, 20, 0, 2), "
+            . "('app', 'posts', 'title', 'varchar(120)', 'varchar', 'NO', NULL, '', '', 120, NULL, NULL, 3), "
+            . "('app', 'posts', 'score', 'decimal(9,3)', 'decimal', 'NO', '10.125', '', '', NULL, 9, 3, 4)",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.statistics VALUES "
+            . "('app', 'posts', 'PRIMARY', 0, 'id', 1), "
+            . "('app', 'posts', 'posts_title_unique', 0, 'title', 1)",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.key_column_usage VALUES "
+            . "('app', 'app', 'posts', 'posts_user_id_foreign', 'user_id', 'users', 'id', 1)",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.referential_constraints VALUES "
+            . "('app', 'posts_user_id_foreign', 'RESTRICT', 'CASCADE')",
+        );
+
+        return $this->connectionFromPdo($pdo);
+    }
+
+    private function makePostgresInspectorConnection(): PdoConnection
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->sqliteCreateFunction('current_schema', static fn (): string => 'public');
+        $pdo->sqliteCreateAggregate(
+            'array_agg',
+            static function (?array $context, mixed $value): array {
+                $context ??= [];
+                $context[] = (string) $value;
+
+                return $context;
+            },
+            static fn (?array $context): string => '{' . implode(',', $context ?? []) . '}',
+            1,
+        );
+        $pdo->exec("ATTACH DATABASE ':memory:' AS information_schema");
+        $pdo->exec(
+            'CREATE TABLE information_schema.columns ('
+            . 'table_schema TEXT, table_name TEXT, column_name TEXT, data_type TEXT, is_nullable TEXT, '
+            . 'column_default TEXT NULL, character_maximum_length INTEGER NULL, numeric_precision INTEGER NULL, '
+            . 'numeric_scale INTEGER NULL, ordinal_position INTEGER'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.key_column_usage ('
+            . 'table_schema TEXT, table_name TEXT, constraint_name TEXT, column_name TEXT, ordinal_position INTEGER'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.table_constraints ('
+            . 'table_schema TEXT, table_name TEXT, constraint_name TEXT, constraint_type TEXT'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.constraint_column_usage ('
+            . 'constraint_schema TEXT, constraint_name TEXT, table_name TEXT, column_name TEXT'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.referential_constraints ('
+            . 'constraint_schema TEXT, constraint_name TEXT, update_rule TEXT, delete_rule TEXT'
+            . ')',
+        );
+        $pdo->exec(
+            'CREATE TABLE information_schema.tables ('
+            . 'table_schema TEXT, table_name TEXT, table_type TEXT'
+            . ')',
+        );
+        $pdo->exec('CREATE TABLE pg_indexes (schemaname TEXT, tablename TEXT, indexname TEXT, indexdef TEXT)');
+
+        $pdo->exec(
+            "INSERT INTO information_schema.tables VALUES "
+            . "('public', 'posts', 'BASE TABLE'), ('public', 'users', 'BASE TABLE')",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.columns VALUES "
+            . "('public', 'posts', 'id', 'bigint', 'NO', 'nextval(''posts_id_seq''::regclass)', NULL, 64, 0, 1), "
+            . "('public', 'posts', 'user_id', 'bigint', 'NO', NULL, NULL, 64, 0, 2), "
+            . "('public', 'posts', 'title', 'character varying', 'NO', NULL, 120, NULL, NULL, 3)",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.table_constraints VALUES "
+            . "('public', 'posts', 'posts_pkey', 'PRIMARY KEY'), "
+            . "('public', 'posts', 'posts_user_id_foreign', 'FOREIGN KEY')",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.key_column_usage VALUES "
+            . "('public', 'posts', 'posts_pkey', 'id', 'id'), "
+            . "('public', 'posts', 'posts_user_id_foreign', 'user_id', 'user_id')",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.constraint_column_usage VALUES "
+            . "('public', 'posts_user_id_foreign', 'users', 'id')",
+        );
+        $pdo->exec(
+            "INSERT INTO information_schema.referential_constraints VALUES "
+            . "('public', 'posts_user_id_foreign', 'NO ACTION', 'CASCADE')",
+        );
+        $pdo->exec(
+            "INSERT INTO pg_indexes VALUES "
+            . "('public', 'posts', 'posts_title_idx', 'CREATE INDEX posts_title_idx ON posts USING btree (title)')",
+        );
+
+        return $this->connectionFromPdo($pdo);
+    }
+
+    private function connectionFromPdo(PDO $pdo): PdoConnection
+    {
+        $connection = new PdoConnection(
+            new PdoConnectionConfig(
+                engine: 'mysql',
+                database: 'placeholder',
+                host: '127.0.0.1',
+            ),
+        );
+
+        $pdoProperty = new ReflectionProperty(PdoConnection::class, 'pdo');
+        $pdoProperty->setValue($connection, $pdo);
+
+        return $connection;
+    }
+
     private function makeInMemoryConnection(): PdoConnection
     {
         $pdo = new PDO('sqlite::memory:');
@@ -1451,17 +1710,6 @@ final class SchemaTest extends TestCase
             . "('jane@example.com', 'active')",
         );
 
-        $connection = new PdoConnection(
-            new PdoConnectionConfig(
-                engine: 'mysql',
-                database: 'placeholder',
-                host: '127.0.0.1',
-            ),
-        );
-
-        $pdoProperty = new ReflectionProperty(PdoConnection::class, 'pdo');
-        $pdoProperty->setValue($connection, $pdo);
-
-        return $connection;
+        return $this->connectionFromPdo($pdo);
     }
 }

@@ -10,13 +10,20 @@ final class PhpRedisStore implements RedisStoreInterface
 {
     private ?\Redis $client = null;
 
+    /**
+     * @var (callable(): \Redis)|null
+     */
+    private mixed $clientFactory;
+
     public function __construct(
         private readonly string $host = '127.0.0.1',
         private readonly int $port = 6379,
         private readonly float $timeout = 2.0,
         private readonly int $database = 0,
         private readonly ?string $password = null,
+        ?callable $clientFactory = null,
     ) {
+        $this->clientFactory = $clientFactory;
     }
 
     public function get(string $key): string|int|float|bool|null
@@ -76,7 +83,13 @@ final class PhpRedisStore implements RedisStoreInterface
             return $this->client;
         }
 
-        $client = new \Redis();
+        $client = $this->clientFactory !== null
+            ? ($this->clientFactory)()
+            : new \Redis();
+        if (!$client instanceof \Redis) {
+            throw new RuntimeException(sprintf('Redis client factory must return %s.', \Redis::class));
+        }
+
         $connected = $client->connect($this->host, $this->port, $this->timeout);
         if ($connected !== true) {
             throw new RuntimeException(sprintf(

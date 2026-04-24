@@ -12,18 +12,24 @@ use Myxa\Database\Attributes\Guarded;
 use Myxa\Database\Attributes\Hidden;
 use Myxa\Database\Attributes\Hook;
 use Myxa\Database\Attributes\Internal;
+use Myxa\Database\Model\BelongsToRelation;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
 use Myxa\Database\Model\CastType;
 use Myxa\Database\Model\HasBlameable;
 use Myxa\Database\Model\HasManyRelation;
+use Myxa\Database\Model\HasOneRelation;
 use Myxa\Database\Model\HasTimestamps;
 use Myxa\Database\Model\HookEvent;
 use Myxa\Database\Model\Model;
 use Myxa\Database\Model\Exceptions\ModelNotFoundException;
+use Myxa\Database\Model\ModelMetadata;
 use Myxa\Database\Model\ModelQuery;
+use Myxa\Database\Model\ModelValueCaster;
+use Myxa\Database\Model\Relation;
 use PDO;
 use JsonException;
+use LogicException;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -102,6 +108,18 @@ final class JsonUser extends Model
 
     #[Cast(CastType::Json)]
     protected ?array $meta = null;
+}
+
+final class MutableDateUser extends Model
+{
+    protected string $table = 'users';
+
+    protected string $email = '';
+
+    protected string $status = '';
+
+    #[Cast(CastType::DateTime, format: DATE_ATOM)]
+    protected ?\DateTime $created_at = null;
 }
 
 final class InternalPropertyUser extends Model
@@ -280,6 +298,16 @@ final class ObservedUser extends Model
 #[CoversClass(Model::class)]
 #[CoversClass(ModelQuery::class)]
 #[CoversClass(ModelNotFoundException::class)]
+#[CoversClass(BelongsToRelation::class)]
+#[CoversClass(Cast::class)]
+#[CoversClass(HasBlameable::class)]
+#[CoversClass(HasManyRelation::class)]
+#[CoversClass(HasOneRelation::class)]
+#[CoversClass(HasTimestamps::class)]
+#[CoversClass(Hook::class)]
+#[CoversClass(ModelMetadata::class)]
+#[CoversClass(ModelValueCaster::class)]
+#[CoversClass(Relation::class)]
 final class ModelTest extends TestCase
 {
     private const string CONNECTION_ALIAS = 'model-test';
@@ -591,6 +619,67 @@ final class ModelTest extends TestCase
         );
     }
 
+    public function testMutableDateCastAcceptsDateTimeInterfacesAndRejectsInvalidTypes(): void
+    {
+        $immutable = new DateTimeImmutable('2026-04-01T12:00:00+00:00');
+
+        $user = new MutableDateUser([
+            'email' => 'mutable-date@example.com',
+            'status' => 'active',
+            'created_at' => $immutable,
+        ]);
+
+        self::assertInstanceOf(\DateTime::class, $user->created_at);
+        self::assertSame('2026-04-01T12:00:00+00:00', $user->created_at?->format(DATE_ATOM));
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot cast non-string value for property "created_at" on model %s to %s.',
+            MutableDateUser::class,
+            \DateTime::class,
+        ));
+
+        new MutableDateUser([
+            'email' => 'broken-mutable-date@example.com',
+            'status' => 'active',
+            'created_at' => 123,
+        ]);
+    }
+
+    public function testJsonCastRejectsNonStringValuesAndUnserializableStorageValues(): void
+    {
+        try {
+            new JsonUser([
+                'email' => 'broken-json-type@example.com',
+                'status' => 'active',
+                'meta' => 123,
+            ]);
+            self::fail('Expected invalid JSON cast type exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame(
+                sprintf('Cannot cast non-string value for property "meta" on model %s to JSON.', JsonUser::class),
+                $exception->getMessage(),
+            );
+        }
+
+        $resource = fopen('php://memory', 'r');
+        self::assertIsResource($resource);
+
+        $user = new JsonUser([
+            'email' => 'broken-json-storage@example.com',
+            'status' => 'active',
+            'meta' => ['resource' => $resource],
+        ]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage(sprintf(
+            'Cannot serialize value for property "meta" on model %s as JSON.',
+            JsonUser::class,
+        ));
+
+        $user->save();
+    }
+
     public function testInvalidJsonCastInputThrowsHelpfulException(): void
     {
         $this->expectException(InvalidArgumentException::class);
@@ -777,6 +866,22 @@ final class ModelTest extends TestCase
         self::assertInstanceOf(HasManyRelation::class, $user->posts());
     }
 
+    public function testQueryCanEagerLoadBelongsToRelations(): void
+    {
+        $user = User::create(['email' => 'belongs-to@example.com', 'status' => 'active']);
+        Profile::create(['user_id' => $user->getKey(), 'bio' => 'Belongs to profile']);
+
+        $profiles = Profile::query()
+            ->with('user')
+            ->orderBy('id')
+            ->get();
+
+        self::assertCount(1, $profiles);
+        self::assertInstanceOf(User::class, $profiles[0]->getRelation('user'));
+        self::assertSame('belongs-to@example.com', $profiles[0]->getRelation('user')?->email);
+        self::assertInstanceOf(BelongsToRelation::class, $profiles[0]->user());
+    }
+
     public function testQueryCanEagerLoadNestedRelations(): void
     {
         $firstUser = User::create(['email' => 'nested-a@example.com', 'status' => 'active']);
@@ -866,6 +971,45 @@ final class ModelTest extends TestCase
                 [$user->getKey()],
             )[0],
         );
+    }
+
+    public function testTimestampAndBlameableTraitsValidateMetadataAndResolverResults(): void
+    {
+        AuditedUser::setBlameResolver(static fn (Model $model): null => null);
+        $unblamed = AuditedUser::create(['email' => 'no-blame@example.com', 'status' => 'draft']);
+
+        self::assertNull($unblamed->created_by);
+        self::assertNull($unblamed->updated_by);
+
+        AuditedUser::setBlameResolver(static fn (Model $model): object => new \stdClass());
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Blame resolver must return an int, string, or null.');
+
+        AuditedUser::create(['email' => 'bad-blame@example.com', 'status' => 'draft']);
+    }
+
+    public function testTimestampMetadataCannotBeEmpty(): void
+    {
+        $user = new User(['email' => 'bad-timestamp@example.com', 'status' => 'draft']);
+        (new ReflectionProperty(User::class, 'createdAtColumn'))->setValue($user, ' ');
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Timestamp metadata property "createdAtColumn" cannot be empty.');
+
+        $user->save();
+    }
+
+    public function testBlameableMetadataCannotBeEmpty(): void
+    {
+        AuditedUser::setBlameResolver(static fn (Model $model): int => 1);
+        $user = new AuditedUser(['email' => 'bad-blame-column@example.com', 'status' => 'draft']);
+        (new ReflectionProperty(AuditedUser::class, 'createdByColumn'))->setValue($user, ' ');
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('Blameable metadata property "createdByColumn" cannot be empty.');
+
+        $user->save();
     }
 
     public function testHookMethodsRunBeforeAndAfterSave(): void

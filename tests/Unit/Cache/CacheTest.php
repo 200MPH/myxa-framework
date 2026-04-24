@@ -107,16 +107,38 @@ final class CacheTest extends TestCase
         self::assertSame('keep', $backend->get('outside'));
     }
 
+    public function testRedisCacheStoreForgetsMalformedPayloadsAndRejectsUnsupportedClearing(): void
+    {
+        $backend = new InMemoryRedisStore();
+        $backend->set('cache:broken', '{"missing":"value"}');
+        $store = new RedisCacheStore(new RedisConnection($backend));
+
+        self::assertSame('fallback', $store->get('broken', 'fallback'));
+        self::assertNull($backend->get('cache:broken'));
+
+        $unsupported = new RedisCacheStore(new RedisConnection(new CacheTestUnsupportedRedisStore()));
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Redis cache clearing is not supported by this Redis store.');
+
+        $unsupported->clear();
+    }
+
     public function testManagerSupportsStoresFactoriesAndRemember(): void
     {
         $manager = new CacheManager('local', new FileCacheStore($this->cachePath));
         $manager->addStore('redis', fn (): RedisCacheStore => new RedisCacheStore(new RedisConnection(new InMemoryRedisStore())));
+        $manager->setDefaultStore('local');
 
         self::assertSame('local', $manager->getDefaultStore());
+        self::assertTrue($manager->hasStore('redis'));
         self::assertTrue($manager->put('count', 5));
         self::assertSame(5, $manager->get('count'));
         self::assertSame(['ready' => true], $manager->remember('expensive', static fn (): array => ['ready' => true]));
+        self::assertSame(['ready' => true], $manager->remember('expensive', static fn (): array => ['fresh' => false]));
         self::assertTrue($manager->has('expensive'));
+        self::assertTrue($manager->forever('forever', 'kept'));
+        self::assertSame('kept', $manager->get('forever'));
         self::assertTrue($manager->forget('count'));
         self::assertTrue($manager->put('remote', 9, store: 'redis'));
         self::assertSame(9, $manager->get('remote', store: 'redis'));
@@ -150,6 +172,12 @@ final class CacheTest extends TestCase
                 $exception->getMessage(),
             );
         }
+
+        $manager->addStore('broken', static fn (): mixed => new \stdClass(), true);
+
+        $this->expectException(\TypeError::class);
+
+        $manager->store('broken');
     }
 
     public function testServiceProviderAndFacadeBootstrapCacheManager(): void
@@ -181,5 +209,33 @@ final class CacheTest extends TestCase
         $this->expectExceptionMessage('Cache facade method "foobar" is not supported.');
 
         Cache::foobar();
+    }
+}
+
+final class CacheTestUnsupportedRedisStore implements \Myxa\Redis\Connection\RedisStoreInterface
+{
+    public function get(string $key): string|int|float|bool|null
+    {
+        return null;
+    }
+
+    public function set(string $key, string|int|float|bool|null $value): bool
+    {
+        return true;
+    }
+
+    public function delete(string $key): bool
+    {
+        return true;
+    }
+
+    public function has(string $key): bool
+    {
+        return false;
+    }
+
+    public function increment(string $key, int $by = 1): int
+    {
+        return $by;
     }
 }

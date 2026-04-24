@@ -87,8 +87,20 @@ final class StorageFacadeTest extends TestCase
         self::assertSame('db', $dbFile->storage());
         self::assertTrue(StorageFacade::exists('notes/welcome.txt'));
         self::assertSame('hello', StorageFacade::read('notes/welcome.txt'));
+        self::assertSame('notes/welcome.txt', StorageFacade::get('notes/welcome.txt')?->location());
         self::assertSame('persisted', StorageFacade::read('notes/welcome.txt', 'db'));
         self::assertSame('banner', StorageFacade::read($uploaded->location()));
+        self::assertTrue(StorageFacade::delete('notes/welcome.txt'));
+    }
+
+    public function testFacadeCanRegisterAndResolveStorageDrivers(): void
+    {
+        StorageFacade::clearManager();
+        $storage = new StorageFacadeTestMemoryStorage();
+
+        StorageFacade::addStorage('memory', $storage);
+
+        self::assertSame($storage, StorageFacade::storage('memory'));
     }
 
     public function testStorageManagerSupportsFactoriesAndProxyMethods(): void
@@ -96,6 +108,7 @@ final class StorageFacadeTest extends TestCase
         $manager = new StorageManager(' local ');
         $storage = new StorageFacadeTestMemoryStorage();
         $manager->addStorage('local', fn (): StorageFacadeTestMemoryStorage => $storage);
+        $manager->setDefaultStorage('local');
 
         self::assertSame('local', $manager->getDefaultStorage());
         self::assertTrue($manager->hasStorage('local'));
@@ -164,7 +177,7 @@ final class StorageFacadeTest extends TestCase
             );
         }
 
-        $manager->addStorage('broken', static fn () => new \stdClass(), true);
+        $manager->addStorage('broken', static fn (): mixed => new \stdClass(), true);
 
         $this->expectException(\TypeError::class);
         $manager->storage('broken');

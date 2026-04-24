@@ -91,12 +91,17 @@ PHP);
     {
         $html = new Html($this->viewsPath);
 
+        self::assertSame(realpath($this->viewsPath), $html->basePath());
         self::assertTrue($html->exists('pages/home'));
+        self::assertTrue($html->exists('/pages/home.php'));
         self::assertFalse($html->exists('pages/missing'));
     }
 
     public function testEscapeIsAvailableForTemplateSafeOutput(): void
     {
+        self::assertSame('', Html::escape(null));
+        self::assertSame('1', Html::escape(true));
+        self::assertSame('0', Html::escape(false));
         self::assertSame(
             '&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;',
             Html::escape('<script>alert("x")</script>'),
@@ -189,5 +194,41 @@ PHP);
         $this->expectExceptionMessage('cannot traverse outside the base path');
 
         $html->render('../secrets');
+    }
+
+    public function testRenderRejectsEmptyAndNullByteViewNames(): void
+    {
+        $html = new Html($this->viewsPath);
+
+        try {
+            $html->render(' / ');
+            self::fail('Expected empty view name exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('View name cannot be empty.', $exception->getMessage());
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('View name cannot contain null bytes.');
+
+        $html->render('pages' . chr(0) . '/home');
+    }
+
+    public function testRenderCleansBufferWhenViewThrows(): void
+    {
+        file_put_contents($this->viewsPath . '/pages/failing.php', <<<'PHP'
+before-error
+<?php throw new RuntimeException('view failed'); ?>
+PHP);
+
+        $html = new Html($this->viewsPath);
+
+        try {
+            $html->render('pages/failing');
+            self::fail('Expected view exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('view failed', $exception->getMessage());
+        } finally {
+            unlink($this->viewsPath . '/pages/failing.php');
+        }
     }
 }

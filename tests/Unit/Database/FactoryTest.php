@@ -103,6 +103,43 @@ final class FactoryTest extends TestCase
         self::assertMatchesRegularExpression('/^[a-z]+(?:-[a-z]+){2}$/', $slug);
         self::assertMatchesRegularExpression('/^[a-z0-9.]+@example\.test$/', $email);
         self::assertContains($faker->choice(['draft', 'active']), ['draft', 'active']);
+        self::assertIsString($faker->paragraph(1));
+    }
+
+    public function testFakeDataRejectsInvalidArgumentsAndTracksComplexUniqueValues(): void
+    {
+        $faker = new FakeData();
+
+        self::assertSame(['nested' => true], $faker->uniqueValue(static fn (): array => ['nested' => true], 'arrays'));
+        self::assertEquals((object) ['id' => 1], $faker->uniqueValue(static fn (): object => (object) ['id' => 1], 'objects'));
+        self::assertSame($faker, $faker->resetUnique());
+
+        foreach (
+            [
+                static fn () => $faker->unique(maxAttempts: 0),
+                static fn () => $faker->uniqueValue(static fn (): string => 'x', maxAttempts: 0),
+                static fn () => $faker->number(2, 1),
+                static fn () => $faker->decimal(2, 1),
+                static fn () => $faker->decimal(1, 2, -1),
+                static fn () => $faker->boolean(101),
+                static fn () => $faker->choice([]),
+                static fn () => $faker->words(0),
+                static fn () => $faker->paragraph(0),
+                static fn () => $faker->email(' '),
+                static fn () => $faker->slug(0),
+                static fn () => $faker->slug(separator: ' '),
+                static fn () => $faker->string(0),
+                static fn () => $faker->word(0),
+                static fn () => $faker->word(5, 3),
+            ] as $callback
+        ) {
+            try {
+                $callback();
+                self::fail('Expected invalid fake data argument exception.');
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
     }
 
     public function testFakeDataSupportsUniqueValuesAndScopeReset(): void
@@ -136,6 +173,11 @@ final class FactoryTest extends TestCase
         self::assertMatchesRegularExpression('/@example\.test$/', $user->email);
         self::assertContains($user->status, ['draft', 'active', 'archived']);
         self::assertStringEndsWith('.', $user->title);
+
+        $users = FactoryUser::factory()->count(2)->make();
+
+        self::assertCount(2, $users);
+        self::assertContainsOnlyInstancesOf(FactoryUser::class, $users);
     }
 
     public function testFactoryCanPersistMultipleModels(): void
@@ -166,6 +208,28 @@ final class FactoryTest extends TestCase
         self::assertSame('archived', $user->status);
         self::assertSame('override@example.test', $user->email);
         self::assertSame(strtoupper($user->title), $user->title);
+    }
+
+    public function testFactoryRejectsInvalidCountAndStateCallbackResults(): void
+    {
+        try {
+            FactoryUser::factory()->count(0);
+            self::fail('Expected invalid factory count exception.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Factory count must be at least 1.', $exception->getMessage());
+        }
+
+        $raw = FactoryUser::factory()->count(2)->raw(['status' => 'draft']);
+
+        self::assertCount(2, $raw);
+        self::assertSame('draft', $raw[0]['status']);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Factory state callbacks must return an attribute array.');
+
+        FactoryUser::factory()
+            ->state(static fn (): string => 'bad')
+            ->raw();
     }
 
     public function testFactoryCanUseAnExplicitManager(): void

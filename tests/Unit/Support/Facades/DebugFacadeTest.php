@@ -130,6 +130,26 @@ final class DebugFacadeTest extends TestCase
         self::assertStringContainsString('from-global', $contents);
         self::assertStringContainsString(basename(__FILE__), $contents);
     }
+
+    public function testDebugReflectCandidateHandlesFunctionsMethodsAndInvalidFrames(): void
+    {
+        $method = new \ReflectionMethod(Debug::class, 'reflectCandidate');
+        $method->setAccessible(true);
+
+        $function = $method->invoke(null, ['function' => __NAMESPACE__ . '\\debug_facade_test_global_writer']);
+        $classMethod = $method->invoke(null, [
+            'class' => DebugFacadeTestReflectionTarget::class,
+            'function' => 'call',
+        ]);
+        $invalid = $method->invoke(null, [
+            'class' => 'MissingClass',
+            'function' => 'missing',
+        ]);
+
+        self::assertSame(__FILE__, $function['file']);
+        self::assertSame(__FILE__, $classMethod['file']);
+        self::assertNull($invalid);
+    }
 }
 
 final class DebugFacadeTestTermination extends \RuntimeException
@@ -143,4 +163,11 @@ final class DebugFacadeTestTermination extends \RuntimeException
 function debug_facade_test_global_writer(): void
 {
     Debug::write('from-global');
+}
+
+final class DebugFacadeTestReflectionTarget
+{
+    public static function call(): void
+    {
+    }
 }
