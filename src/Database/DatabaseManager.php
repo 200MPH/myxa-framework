@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Myxa\Database;
 
 use Closure;
+use Generator;
 use InvalidArgumentException;
 use Myxa\Database\Connection\PdoConnection;
 use Myxa\Database\Connection\PdoConnectionConfig;
@@ -231,6 +232,37 @@ final class DatabaseManager
                 return $result;
             },
         );
+    }
+
+    /**
+     * Stream selected rows one at a time.
+     *
+     * @param array<int|string, scalar|null> $bindings
+     * @return Generator<int, array<string, mixed>, void, void>
+     * @throws DatabaseException
+     */
+    public function cursor(
+        string $sql,
+        #[SensitiveParameter]
+        array $bindings = [],
+        ?string $connection = null,
+    ): Generator {
+        $resolvedConnection = $this->resolveConnectionName($connection);
+        $statement = null;
+
+        try {
+            $statement = $this->prepare($sql, $bindings, $resolvedConnection);
+            $statement->execute();
+
+            while (($row = $statement->fetch(PDO::FETCH_ASSOC)) !== false) {
+                /** @var array<string, mixed> $row */
+                yield $row;
+            }
+        } catch (PDOException $exception) {
+            throw DatabaseException::fromPdoException($exception, $sql, $resolvedConnection);
+        } finally {
+            $statement?->closeCursor();
+        }
     }
 
     /**

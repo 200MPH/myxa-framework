@@ -5,12 +5,16 @@ declare(strict_types=1);
 namespace Test\Unit\Support\Storage;
 
 use InvalidArgumentException;
+use Myxa\Storage\AbstractStorage;
 use Myxa\Storage\Local\LocalStorage;
+use Myxa\Storage\StoragePath;
 use Myxa\Storage\StoredFile;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
+#[CoversClass(AbstractStorage::class)]
 #[CoversClass(LocalStorage::class)]
+#[CoversClass(StoragePath::class)]
 #[CoversClass(StoredFile::class)]
 final class LocalStorageTest extends TestCase
 {
@@ -67,6 +71,26 @@ final class LocalStorageTest extends TestCase
         $this->expectExceptionMessage('File location cannot contain traversal segments.');
 
         $storage->put('../escape.txt', 'nope');
+    }
+
+    public function testStoragePathNormalizesSlashesAndRejectsEmptyLocations(): void
+    {
+        self::assertSame('docs/report.txt', StoragePath::normalizeLocation('\\docs//report.txt'));
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('File location cannot be empty.');
+
+        StoragePath::normalizeLocation(' / ');
+    }
+
+    public function testLocalStorageRejectsInvalidMetadataOptions(): void
+    {
+        $storage = new LocalStorage($this->root);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Stored file metadata must be an array.');
+
+        $storage->put('docs/report.txt', 'contents', ['metadata' => 'bad']);
     }
 
     public function testLocalStorageExposesAliasPathAndMissingReadDeleteBehavior(): void

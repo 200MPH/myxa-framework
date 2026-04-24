@@ -5,12 +5,18 @@ declare(strict_types=1);
 namespace Test\Unit\RateLimit;
 
 use Myxa\RateLimit\FileRateLimiterStore;
+use Myxa\RateLimit\Exceptions\TooManyRequestsException;
+use Myxa\RateLimit\RateLimitCounter;
+use Myxa\RateLimit\RateLimitResult;
 use Myxa\RateLimit\RateLimiter;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
 #[CoversClass(FileRateLimiterStore::class)]
+#[CoversClass(RateLimitCounter::class)]
+#[CoversClass(RateLimitResult::class)]
 #[CoversClass(RateLimiter::class)]
+#[CoversClass(TooManyRequestsException::class)]
 final class RateLimiterTest extends TestCase
 {
     private string $directory;
@@ -63,5 +69,23 @@ final class RateLimiterTest extends TestCase
 
         self::assertSame(1, $result->attempts);
         self::assertFalse($result->tooManyAttempts);
+    }
+
+    public function testTooManyRequestsExceptionExposesRateLimitResult(): void
+    {
+        $result = new RateLimitResult(
+            key: 'ip|/api/posts',
+            attempts: 3,
+            maxAttempts: 2,
+            remaining: 0,
+            retryAfter: 30,
+            resetsAt: time() + 30,
+            tooManyAttempts: true,
+        );
+
+        $exception = new TooManyRequestsException($result);
+
+        self::assertSame($result, $exception->result());
+        self::assertSame('Too Many Requests.', $exception->getMessage());
     }
 }

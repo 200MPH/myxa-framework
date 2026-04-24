@@ -11,6 +11,9 @@ use Myxa\Auth\AuthManager;
 use Myxa\Auth\AuthServiceProvider;
 use Myxa\Auth\BearerTokenGuard;
 use Myxa\Auth\BearerTokenResolverInterface;
+use Myxa\Auth\Exceptions\AuthenticationException;
+use Myxa\Auth\NullBearerTokenResolver;
+use Myxa\Auth\NullSessionUserResolver;
 use Myxa\Auth\SessionGuard;
 use Myxa\Auth\SessionUserResolverInterface;
 use Myxa\Http\Request;
@@ -19,7 +22,10 @@ use PHPUnit\Framework\TestCase;
 
 #[CoversClass(AuthManager::class)]
 #[CoversClass(AuthServiceProvider::class)]
+#[CoversClass(AuthenticationException::class)]
 #[CoversClass(BearerTokenGuard::class)]
+#[CoversClass(NullBearerTokenResolver::class)]
+#[CoversClass(NullSessionUserResolver::class)]
 #[CoversClass(SessionGuard::class)]
 final class AuthManagerTest extends TestCase
 {
@@ -84,6 +90,35 @@ final class AuthManagerTest extends TestCase
         self::assertSame(['id' => 20], $apiGuard->user($apiRequest));
         self::assertTrue($sessionGuard->check($webRequest));
         self::assertTrue($apiGuard->check($apiRequest));
+
+        self::assertNull($sessionGuard->user(new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/dashboard',
+        ])));
+        self::assertNull($apiGuard->user(new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/api/me',
+        ])));
+    }
+
+    public function testDefaultNullResolversReturnNoUser(): void
+    {
+        $request = new Request(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/profile',
+        ]);
+
+        self::assertNull((new NullSessionUserResolver())->resolve('session-id', $request));
+        self::assertNull((new NullBearerTokenResolver())->resolve('token', $request));
+    }
+
+    public function testAuthenticationExceptionExposesContext(): void
+    {
+        $exception = new AuthenticationException('api', '/signin');
+
+        self::assertSame('api', $exception->guard());
+        self::assertSame('/signin', $exception->redirectTo());
+        self::assertSame('Unauthenticated.', $exception->getMessage());
     }
 
     public function testAuthManagerCanSwapDefaultGuardsAndClearCachedUsers(): void

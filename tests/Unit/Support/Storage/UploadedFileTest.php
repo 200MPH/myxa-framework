@@ -126,6 +126,23 @@ final class UploadedFileTest extends TestCase
         self::assertSame('user-1', $stored->metadata('owner'));
     }
 
+    public function testUploadedFileStoresWithExplicitStorageAndLocationArguments(): void
+    {
+        $upload = UploadedFile::fromArray([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 12,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ]);
+        $storage = new LocalStorage($this->storageRoot);
+
+        $stored = $upload->store($storage, 'avatars/custom.png', ['metadata' => ['owner' => 'user-1']]);
+
+        self::assertSame('avatars/custom.png', $stored->location());
+        self::assertSame('user-1', $stored->metadata('owner'));
+    }
+
     public function testUploadedFileRejectsExtensionMismatch(): void
     {
         $upload = UploadedFile::fromArray([
@@ -185,6 +202,56 @@ final class UploadedFileTest extends TestCase
 
         self::assertSame('The uploaded file was only partially uploaded.', $partial->errorMessage());
 
+        self::assertSame('OK!', UploadedFile::fromArray([
+            'name' => 'ok.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ])->errorMessage());
+        self::assertSame('The uploaded file exceeds the upload_max_filesize directive in php.ini.', UploadedFile::fromArray([
+            'name' => 'too-large.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 1,
+        ])->errorMessage());
+        self::assertSame('The uploaded file exceeds the MAX_FILE_SIZE directive that was specified in the HTML form.', UploadedFile::fromArray([
+            'name' => 'form-too-large.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 2,
+        ])->errorMessage());
+        self::assertSame('No file was uploaded.', UploadedFile::fromArray([
+            'name' => 'none.txt',
+            'type' => 'text/plain',
+            'size' => 0,
+            'tmp_name' => $this->tempFile,
+            'error' => 4,
+        ])->errorMessage());
+        self::assertSame('Failed to write file to disk.', UploadedFile::fromArray([
+            'name' => 'write-failed.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 7,
+        ])->errorMessage());
+        self::assertSame('A PHP extension stopped the file upload.', UploadedFile::fromArray([
+            'name' => 'extension-stopped.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 8,
+        ])->errorMessage());
+        self::assertSame('Unrecognized error', UploadedFile::fromArray([
+            'name' => 'unknown.txt',
+            'type' => 'text/plain',
+            'size' => 3,
+            'tmp_name' => $this->tempFile,
+            'error' => 999,
+        ])->errorMessage());
+
         $missingFolder = UploadedFile::fromArray([
             'name' => 'missing.txt',
             'type' => 'text/plain',
@@ -210,6 +277,36 @@ final class UploadedFileTest extends TestCase
         ));
 
         $invalidRead->contents();
+    }
+
+    public function testUploadedFileRejectsInvalidStoreArguments(): void
+    {
+        $upload = UploadedFile::fromArray([
+            'name' => 'avatar.png',
+            'type' => 'image/png',
+            'size' => 12,
+            'tmp_name' => $this->tempFile,
+            'error' => 0,
+        ]);
+
+        try {
+            $upload->store(new LocalStorage($this->storageRoot), 123);
+            self::fail('Expected invalid upload location exception.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Upload location must be a string or null.', $exception->getMessage());
+        }
+
+        try {
+            $upload->store('avatar.png', 'bad-options', new LocalStorage($this->storageRoot));
+            self::fail('Expected invalid upload options exception.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertSame('Upload options must be an array.', $exception->getMessage());
+        }
+
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Upload storage must be a storage alias, storage instance, or null.');
+
+        $upload->store('avatar.png', [], new \stdClass());
     }
 
     private function deleteDirectory(string $directory): void

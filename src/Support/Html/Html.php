@@ -146,7 +146,7 @@ final class Html
             throw new InvalidArgumentException('View name cannot be empty.');
         }
 
-        if (str_contains($normalized, "\0")) {
+        if (str_contains($normalized, "\x00")) {
             throw new InvalidArgumentException('View name cannot contain null bytes.');
         }
 

@@ -62,6 +62,15 @@ final class LoggingTest extends TestCase
         self::assertSame($app->make(LoggerInterface::class), $app->make('logger'));
     }
 
+    public function testNullLoggerAcceptsMessagesWithoutWriting(): void
+    {
+        $logger = new NullLogger();
+
+        $logger->log(LogLevel::Info, 'Ignored message.', ['context' => true]);
+
+        self::assertTrue(true);
+    }
+
     public function testFileLoggerNormalizesThrowableAndStringableContext(): void
     {
         $logger = new FileLogger($this->path);

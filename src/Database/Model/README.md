@@ -97,6 +97,24 @@ $first = User::query()->where('status', '=', 'active')->first();
 $exists = User::query()->where('status', '=', 'active')->exists();
 ```
 
+For large result sets, use `cursor()` to stream one model at a time:
+
+```php
+foreach (User::query()->where('status', '=', 'active')->cursor() as $user) {
+    // $user is one User instance.
+}
+```
+
+Use `chunk()` when batch processing is more useful than one-by-one streaming:
+
+```php
+User::query()->orderBy('id')->chunk(100, function (array $users, int $page): void {
+    foreach ($users as $user) {
+        // Process up to 100 User instances at a time.
+    }
+});
+```
+
 ## Factories
 
 Factories are intentionally lightweight. The framework provides the base `Factory`, a small fake data generator, and a `HasFactory` trait. Your app defines the concrete factory class.

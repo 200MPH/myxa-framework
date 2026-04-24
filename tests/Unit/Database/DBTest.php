@@ -147,6 +147,14 @@ final class DBTest extends TestCase
         self::assertSame('COUNT(*) AS aggregate', (string) $raw);
     }
 
+    public function testRawRejectsEmptyExpressions(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Raw SQL expression cannot be empty.');
+
+        DB::raw(' ');
+    }
+
     public function testConnectionAndPdoReturnRegisteredObjects(): void
     {
         $connection = DB::connection(self::CONNECTION_ALIAS);

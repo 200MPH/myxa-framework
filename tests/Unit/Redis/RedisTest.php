@@ -8,15 +8,18 @@ use BadMethodCallException;
 use InvalidArgumentException;
 use Myxa\Application;
 use Myxa\Redis\Connection\InMemoryRedisStore;
+use Myxa\Redis\Connection\PhpRedisStore;
 use Myxa\Redis\Connection\RedisConnection;
 use Myxa\Redis\RedisManager;
 use Myxa\Redis\RedisServiceProvider;
 use Myxa\Support\Facades\Redis;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use RuntimeException;
 
 #[CoversClass(InMemoryRedisStore::class)]
+#[CoversClass(PhpRedisStore::class)]
 #[CoversClass(RedisConnection::class)]
 #[CoversClass(RedisManager::class)]
 #[CoversClass(RedisServiceProvider::class)]
@@ -96,6 +99,157 @@ final class RedisTest extends TestCase
         RedisConnection::get(self::CONNECTION_ALIAS);
     }
 
+    public function testPhpRedisStoreEncodesDecodesAndProxiesClientOperations(): void
+    {
+        if (!class_exists(\Redis::class)) {
+            self::markTestSkipped('phpredis extension is not available.');
+        }
+
+        $client = $this->getMockBuilder(\Redis::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['get', 'set', 'del', 'exists', 'flushDB'])
+            ->getMock();
+        $client->method('get')->willReturnMap([
+            ['missing', false],
+            ['name', '{"type":"string","value":"myxa"}'],
+            ['count', '{"type":"int","value":2}'],
+            ['flag', '{"type":"bool","value":true}'],
+            ['ratio', '{"type":"float","value":1.5}'],
+            ['empty', '{"type":"null","value":null}'],
+        ]);
+        $client->method('set')->willReturn(true);
+        $client->method('del')->willReturn(1);
+        $client->method('exists')->willReturn(1);
+
+        $store = new PhpRedisStore();
+        $this->injectPhpRedisClient($store, $client);
+
+        self::assertNull($store->get('missing'));
+        self::assertSame('myxa', $store->get('name'));
+        self::assertSame(2, $store->get('count'));
+        self::assertTrue($store->get('flag'));
+        self::assertSame(1.5, $store->get('ratio'));
+        self::assertNull($store->get('empty'));
+        self::assertTrue($store->set('next', 3));
+        self::assertTrue($store->set('enabled', true));
+        self::assertTrue($store->set('ratio', 1.5));
+        self::assertTrue($store->set('nothing', null));
+        self::assertTrue($store->delete('name'));
+        self::assertTrue($store->has('name'));
+        self::assertSame(4, $store->increment('count', 2));
+        $store->flush();
+    }
+
+    public function testPhpRedisStoreConnectsAuthenticatesAndSelectsDatabase(): void
+    {
+        if (!class_exists(\Redis::class)) {
+            self::markTestSkipped('phpredis extension is not available.');
+        }
+
+        $client = $this->getMockBuilder(\Redis::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connect', 'auth', 'select'])
+            ->getMock();
+        $client->expects(self::once())
+            ->method('connect')
+            ->with('redis-host', 6380, 1.5)
+            ->willReturn(true);
+        $client->expects(self::once())
+            ->method('auth')
+            ->with('secret')
+            ->willReturn(true);
+        $client->expects(self::once())
+            ->method('select')
+            ->with(2)
+            ->willReturn(true);
+
+        $store = new PhpRedisStore(
+            host: 'redis-host',
+            port: 6380,
+            timeout: 1.5,
+            database: 2,
+            password: 'secret',
+            clientFactory: static fn (): \Redis => $client,
+        );
+
+        self::assertSame($client, $store->client());
+        self::assertSame($client, $store->client());
+    }
+
+    public function testPhpRedisStoreReportsConnectionSetupFailures(): void
+    {
+        if (!class_exists(\Redis::class)) {
+            self::markTestSkipped('phpredis extension is not available.');
+        }
+
+        $badFactory = new PhpRedisStore(clientFactory: static fn (): mixed => new \stdClass());
+
+        try {
+            $badFactory->client();
+            self::fail('Expected invalid Redis client factory exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame(sprintf('Redis client factory must return %s.', \Redis::class), $exception->getMessage());
+        }
+
+        $authClient = $this->getMockBuilder(\Redis::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connect', 'auth'])
+            ->getMock();
+        $authClient->method('connect')->willReturn(true);
+        $authClient->method('auth')->willReturn(false);
+
+        try {
+            (new PhpRedisStore(password: 'bad', clientFactory: static fn (): \Redis => $authClient))->client();
+            self::fail('Expected Redis auth exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Unable to authenticate with Redis.', $exception->getMessage());
+        }
+
+        $selectClient = $this->getMockBuilder(\Redis::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['connect', 'select'])
+            ->getMock();
+        $selectClient->method('connect')->willReturn(true);
+        $selectClient->method('select')->willReturn(false);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Unable to select Redis database 2.');
+
+        (new PhpRedisStore(database: 2, clientFactory: static fn (): \Redis => $selectClient))->client();
+    }
+
+    public function testPhpRedisStoreRejectsInvalidPayloads(): void
+    {
+        if (!class_exists(\Redis::class)) {
+            self::markTestSkipped('phpredis extension is not available.');
+        }
+
+        foreach (
+            [
+                'non-string' => 123,
+                'invalid' => '{"value":"missing-type"}',
+                'unknown' => '{"type":"other","value":"x"}',
+                'not-integer' => '{"type":"string","value":"myxa"}',
+            ] as $key => $payload
+        ) {
+            $client = $this->getMockBuilder(\Redis::class)
+                ->disableOriginalConstructor()
+                ->onlyMethods(['get'])
+                ->getMock();
+            $client->method('get')->willReturn($payload);
+
+            $store = new PhpRedisStore();
+            $this->injectPhpRedisClient($store, $client);
+
+            try {
+                $key === 'not-integer' ? $store->increment($key) : $store->get($key);
+                self::fail('Expected invalid Redis payload exception.');
+            } catch (RuntimeException $exception) {
+                self::assertStringContainsString(sprintf('Redis key "%s"', $key), $exception->getMessage());
+            }
+        }
+    }
+
     public function testManagerResolvesConnectionsAndCommands(): void
     {
         $manager = new RedisManager(
@@ -130,8 +284,11 @@ final class RedisTest extends TestCase
 
         $manager = new RedisManager(' fallback ');
         self::assertSame($fallback, $manager->connection());
+        self::assertTrue($manager->hasConnection('fallback'));
 
-        $manager->addConnection('factory', fn (): RedisConnection => new RedisConnection(new InMemoryRedisStore()));
+        $manager->addConnection('factory', fn (RedisManager $redis): RedisConnection => new RedisConnection(new InMemoryRedisStore()));
+        $manager->setDefaultConnection('factory');
+        self::assertSame('factory', $manager->getDefaultConnection());
         self::assertInstanceOf(RedisConnection::class, $manager->connection('factory'));
 
         try {
@@ -150,6 +307,13 @@ final class RedisTest extends TestCase
                 $exception->getMessage(),
             );
         }
+
+        try {
+            $manager->addConnection('factory', new RedisConnection(new InMemoryRedisStore()));
+            self::fail('Expected duplicate connection exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Connection alias "factory" is already registered.', $exception->getMessage());
+        }
     }
 
     public function testManagerRejectsMissingConnectionsAndInvalidFactoryResults(): void
@@ -163,7 +327,7 @@ final class RedisTest extends TestCase
             self::assertSame('Connection alias "missing" is not registered.', $exception->getMessage());
         }
 
-        $manager->addConnection('broken', static fn () => new \stdClass(), true);
+        $manager->addConnection('broken', static fn (): mixed => new \stdClass(), true);
 
         $this->expectException(\TypeError::class);
 
@@ -202,5 +366,11 @@ final class RedisTest extends TestCase
         $this->expectExceptionMessage('Redis facade method "foobar" is not supported.');
 
         Redis::foobar();
+    }
+
+    private function injectPhpRedisClient(PhpRedisStore $store, \Redis $client): void
+    {
+        $property = new ReflectionProperty(PhpRedisStore::class, 'client');
+        $property->setValue($store, $client);
     }
 }

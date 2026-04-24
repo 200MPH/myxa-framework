@@ -375,6 +375,13 @@ final class QueryBuilderTest extends TestCase
         } catch (InvalidArgumentException $exception) {
             self::assertSame('Identifier cannot contain backticks.', $exception->getMessage());
         }
+
+        try {
+            (new QueryBuilder(new SqliteQueryGrammar()))->from('bad"name')->toSql();
+            self::fail('Expected invalid SQLite identifier exception.');
+        } catch (InvalidArgumentException $exception) {
+            self::assertSame('Identifier cannot contain double quotes.', $exception->getMessage());
+        }
     }
 
     public function testSqlServerGrammarBuildsDialectAwareSql(): void
