@@ -26,6 +26,8 @@ final class MongoDbCollectionRuntimeTest extends TestCase
 {
     private string $databaseName = 'myxa_test';
 
+    private string $uri = 'mongodb://127.0.0.1:27017';
+
     protected function setUp(): void
     {
         if (getenv('MYXA_MONGO_TEST_ENABLED') !== '1') {
@@ -41,13 +43,26 @@ final class MongoDbCollectionRuntimeTest extends TestCase
         }
 
         $this->databaseName = getenv('MYXA_MONGO_TEST_DATABASE') ?: 'myxa_test';
-        $this->dropDatabase();
+        $this->uri = getenv('MYXA_MONGO_TEST_URI') ?: 'mongodb://127.0.0.1:27017';
+
+        try {
+            $this->dropDatabase();
+        } catch (\Throwable $exception) {
+            self::markTestSkipped(sprintf(
+                'MongoDB runtime server is not available at %s: %s',
+                $this->uri,
+                $exception->getMessage(),
+            ));
+        }
     }
 
     protected function tearDown(): void
     {
         if (extension_loaded('mongodb') && class_exists(Client::class)) {
-            $this->dropDatabase();
+            try {
+                $this->dropDatabase();
+            } catch (\Throwable) {
+            }
         }
 
         MongoModel::clearManager();
@@ -113,7 +128,7 @@ final class MongoDbCollectionRuntimeTest extends TestCase
     {
         $manager = new MongoManager('runtime');
         $manager->addConnection('runtime', MongoConnection::fromUri(
-            uri: getenv('MYXA_MONGO_TEST_URI') ?: 'mongodb://mongo:27017',
+            uri: $this->uri,
             database: $this->databaseName,
         ));
 
@@ -122,7 +137,9 @@ final class MongoDbCollectionRuntimeTest extends TestCase
 
     private function dropDatabase(): void
     {
-        $client = new Client(getenv('MYXA_MONGO_TEST_URI') ?: 'mongodb://mongo:27017');
+        $client = new Client($this->uri, [
+            'serverSelectionTimeoutMS' => 1000,
+        ]);
         $client->selectDatabase($this->databaseName)->drop();
     }
 }
