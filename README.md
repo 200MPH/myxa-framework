@@ -39,8 +39,7 @@ composer require 200mph/myxa-framework
 
 ## Docker Setup
 
-The repository includes a PHP 8.4 CLI container and a MySQL container.
-It also includes a PostgreSQL container for execution-level database tests.
+The repository includes a PHP 8.4 CLI container plus MySQL, PostgreSQL, Redis, and MongoDB containers for execution-level integration tests.
 
 ### Install Composer dependencies
 
@@ -81,6 +80,7 @@ docker compose up -d
 docker exec -it myxa-php-cli /bin/bash
 docker exec -it myxa-mysql /bin/bash
 docker exec -it myxa-postgres /bin/bash
+docker exec -it myxa-mongo /bin/bash
 ```
 
 MySQL credentials are loaded from:
@@ -92,10 +92,14 @@ PostgreSQL credentials are loaded from:
 Default host in Docker network:
 - `mysql`
 - `postgres`
+- `redis`
+- `mongo`
 
 Default exposed host port:
 - `3306`
 - `5432`
+- `6379`
+- `27017`
 
 On Linux/macOS, build the PHP image with your local UID/GID:
 

@@ -28,6 +28,9 @@ services:
       MYXA_REDIS_TEST_HOST: redis
       MYXA_REDIS_TEST_PORT: "6379"
       MYXA_REDIS_TEST_DATABASE: "0"
+      MYXA_MONGO_TEST_ENABLED: "1"
+      MYXA_MONGO_TEST_URI: mongodb://mongo:27017
+      MYXA_MONGO_TEST_DATABASE: myxa_test
     volumes:
       - ./:/app
       - composer-cache:/tmp/composer-cache
@@ -81,8 +84,23 @@ services:
       retries: 20
       start_period: 5s
 
+  mongo:
+    container_name: myxa-mongo
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
 volumes:
   composer-cache:
   mysql-data:
   postgres-data:
   redis-data:
+  mongo-data:
