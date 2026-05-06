@@ -8,6 +8,7 @@ use BadMethodCallException;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use LogicException;
+use MongoDB\BSON\ObjectId;
 use Myxa\Application;
 use Myxa\Database\Attributes\Cast;
 use Myxa\Database\Attributes\Guarded;
@@ -18,6 +19,7 @@ use Myxa\Database\Model\CastType;
 use Myxa\Database\Model\HookEvent;
 use Myxa\Mongo\Connection\InMemoryMongoCollection;
 use Myxa\Mongo\Connection\MongoConnection;
+use Myxa\Mongo\Connection\MongoDbCollection;
 use Myxa\Mongo\MongoManager;
 use Myxa\Mongo\MongoModel;
 use Myxa\Mongo\MongoServiceProvider;
@@ -157,8 +159,213 @@ final class ObservedUserDocument extends MongoModel
     }
 }
 
+final class FakeMongoInsertedId
+{
+    public function __construct(private readonly string $value)
+    {
+    }
+
+    public function __toString(): string
+    {
+        return $this->value;
+    }
+}
+
+final class FakeMongoWriteResult
+{
+    public function __construct(
+        private readonly mixed $insertedId = null,
+        private readonly int $matchedCount = 0,
+        private readonly int $deletedCount = 0,
+    ) {
+    }
+
+    public function getInsertedId(): mixed
+    {
+        return $this->insertedId;
+    }
+
+    public function getMatchedCount(): int
+    {
+        return $this->matchedCount;
+    }
+
+    public function getDeletedCount(): int
+    {
+        return $this->deletedCount;
+    }
+}
+
+final class FakeMongoCollection
+{
+    /** @var list<array<string, mixed>> */
+    public array $documents = [];
+
+    /** @var array<string, mixed>|null */
+    public ?array $lastFilter = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $lastReplacement = null;
+
+    public function findOne(array $filter): ?array
+    {
+        $this->lastFilter = $filter;
+
+        foreach ($this->documents as $document) {
+            if ((string) ($document['_id'] ?? '') === (string) ($filter['_id'] ?? '')) {
+                return $document;
+            }
+        }
+
+        return null;
+    }
+
+    public function insertOne(array $document): FakeMongoWriteResult
+    {
+        $document['_id'] ??= new FakeMongoInsertedId('fake-mongo-id');
+        $this->documents[] = $document;
+
+        return new FakeMongoWriteResult(insertedId: $document['_id']);
+    }
+
+    public function replaceOne(array $filter, array $replacement): FakeMongoWriteResult
+    {
+        $this->lastFilter = $filter;
+        $this->lastReplacement = $replacement;
+
+        foreach ($this->documents as $index => $document) {
+            if ((string) ($document['_id'] ?? '') !== (string) ($filter['_id'] ?? '')) {
+                continue;
+            }
+
+            $this->documents[$index] = $replacement;
+
+            return new FakeMongoWriteResult(matchedCount: 1);
+        }
+
+        return new FakeMongoWriteResult();
+    }
+
+    public function deleteOne(array $filter): FakeMongoWriteResult
+    {
+        foreach ($this->documents as $index => $document) {
+            if ((string) ($document['_id'] ?? '') !== (string) ($filter['_id'] ?? '')) {
+                continue;
+            }
+
+            unset($this->documents[$index]);
+
+            return new FakeMongoWriteResult(deletedCount: 1);
+        }
+
+        return new FakeMongoWriteResult();
+    }
+}
+
+final class FakeMongoArrayDocument
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function getArrayCopy(): array
+    {
+        return [
+            '_id' => new FakeMongoInsertedId('array-document-id'),
+            'profile' => [
+                '_id' => new FakeMongoInsertedId('nested-array-id'),
+            ],
+            'settings' => new FakeMongoNestedArrayDocument(),
+        ];
+    }
+}
+
+final class FakeMongoNestedArrayDocument
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function getArrayCopy(): array
+    {
+        return [
+            '_id' => new FakeMongoInsertedId('nested-object-id'),
+        ];
+    }
+}
+
+final class FakeMongoBsonDocument
+{
+    /**
+     * @return object
+     */
+    public function bsonSerialize(): object
+    {
+        return (object) [
+            '_id' => new FakeMongoInsertedId('bson-document-id'),
+            'email' => 'bson@example.com',
+        ];
+    }
+}
+
+final class FakeMongoFlexibleCollection
+{
+    public mixed $findOneResult = null;
+
+    public mixed $insertOneResult = null;
+
+    public mixed $replaceOneResult = null;
+
+    public mixed $deleteOneResult = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $lastFilter = null;
+
+    /** @var array<string, mixed>|null */
+    public ?array $lastDocument = null;
+
+    public function findOne(array $filter): mixed
+    {
+        $this->lastFilter = $filter;
+
+        return $this->findOneResult;
+    }
+
+    public function insertOne(array $document): mixed
+    {
+        $this->lastDocument = $document;
+
+        return $this->insertOneResult;
+    }
+
+    public function replaceOne(array $filter, array $replacement): mixed
+    {
+        $this->lastFilter = $filter;
+        $this->lastDocument = $replacement;
+
+        return $this->replaceOneResult;
+    }
+
+    public function deleteOne(array $filter): mixed
+    {
+        $this->lastFilter = $filter;
+
+        return $this->deleteOneResult;
+    }
+}
+
+final class FakeMongoDatabase
+{
+    /** @var array<string, FakeMongoCollection> */
+    public array $collections = [];
+
+    public function selectCollection(string $name): FakeMongoCollection
+    {
+        return $this->collections[$name] ??= new FakeMongoCollection();
+    }
+}
+
 #[CoversClass(Mongo::class)]
 #[CoversClass(MongoConnection::class)]
+#[CoversClass(MongoDbCollection::class)]
 #[CoversClass(InMemoryMongoCollection::class)]
 #[CoversClass(MongoManager::class)]
 #[CoversClass(MongoModel::class)]
@@ -547,6 +754,180 @@ final class MongoTest extends TestCase
         $this->expectExceptionMessage('Collection "users" is not registered on this Mongo connection.');
 
         $connection->collection('users');
+    }
+
+    public function testMongoConnectionCanResolveRealDatabaseCollectionsLazily(): void
+    {
+        $database = new FakeMongoDatabase();
+        $connection = MongoConnection::fromDatabase($database);
+
+        $collection = $connection->collection('users');
+
+        self::assertInstanceOf(MongoDbCollection::class, $collection);
+        self::assertSame($collection, $connection->collection('users'));
+        self::assertArrayHasKey('users', $database->collections);
+    }
+
+    public function testMongoDbCollectionWrapsMongoCollectionOperations(): void
+    {
+        $native = new FakeMongoCollection();
+        $collection = new MongoDbCollection($native);
+
+        $id = $collection->insertOne(['email' => 'native@example.com']);
+        $found = $collection->findOne(['_id' => $id]);
+
+        self::assertSame('fake-mongo-id', $id);
+        self::assertSame('fake-mongo-id', $found['_id'] ?? null);
+        self::assertSame('native@example.com', $found['email'] ?? null);
+
+        self::assertTrue($collection->updateOne(['_id' => $id], ['_id' => $id, 'email' => 'updated@example.com']));
+        self::assertSame(['_id' => $id, 'email' => 'updated@example.com'], $native->lastReplacement);
+        self::assertFalse($collection->updateOne(['_id' => 'missing'], ['email' => 'nope']));
+
+        self::assertTrue($collection->deleteOne(['_id' => $id]));
+        self::assertFalse($collection->deleteOne(['_id' => $id]));
+    }
+
+    public function testMongoDbCollectionNormalizesNativeMongoDocumentShapes(): void
+    {
+        $native = new FakeMongoFlexibleCollection();
+        $collection = new MongoDbCollection($native);
+
+        $native->findOneResult = new FakeMongoArrayDocument();
+        $document = $collection->findOne(['_id' => 'array-document-id']);
+
+        self::assertSame('array-document-id', $document['_id']);
+        self::assertSame('nested-array-id', $document['profile']['_id']);
+        self::assertSame('nested-object-id', $document['settings']['_id']);
+
+        $native->findOneResult = new FakeMongoBsonDocument();
+        $document = $collection->findOne(['email' => 'bson@example.com']);
+
+        self::assertSame('bson-document-id', $document['_id']);
+        self::assertSame('bson@example.com', $document['email']);
+
+        $native->findOneResult = (object) [
+            '_id' => new FakeMongoInsertedId('object-document-id'),
+            'email' => 'object@example.com',
+        ];
+        $document = $collection->findOne(['email' => 'object@example.com']);
+
+        self::assertSame('object-document-id', $document['_id']);
+        self::assertSame('object@example.com', $document['email']);
+
+        $native->findOneResult = new \ArrayIterator([
+            '_id' => new FakeMongoInsertedId('iterator-document-id'),
+            'email' => 'iterator@example.com',
+        ]);
+        $document = $collection->findOne(['email' => 'iterator@example.com']);
+
+        self::assertSame('iterator-document-id', $document['_id']);
+        self::assertSame('iterator@example.com', $document['email']);
+    }
+
+    public function testMongoDbCollectionConvertsObjectIdFiltersAndWrites(): void
+    {
+        $native = new FakeMongoFlexibleCollection();
+        $native->insertOneResult = new FakeMongoWriteResult(insertedId: new ObjectId('507f1f77bcf86cd799439011'));
+        $native->replaceOneResult = new FakeMongoWriteResult(matchedCount: 1);
+        $native->deleteOneResult = new FakeMongoWriteResult(deletedCount: 1);
+        $collection = new MongoDbCollection($native);
+
+        self::assertSame('507f1f77bcf86cd799439011', $collection->insertOne([
+            '_id' => '507f1f77bcf86cd799439011',
+            'email' => 'object-id@example.com',
+        ]));
+        self::assertInstanceOf(ObjectId::class, $native->lastDocument['_id']);
+
+        self::assertTrue($collection->updateOne([
+            '_id' => '507f1f77bcf86cd799439011',
+        ], [
+            '_id' => '507f1f77bcf86cd799439012',
+            'email' => 'updated-object-id@example.com',
+        ]));
+        self::assertInstanceOf(ObjectId::class, $native->lastFilter['_id']);
+        self::assertInstanceOf(ObjectId::class, $native->lastDocument['_id']);
+
+        self::assertTrue($collection->deleteOne(['_id' => '507f1f77bcf86cd799439011']));
+        self::assertInstanceOf(ObjectId::class, $native->lastFilter['_id']);
+
+        $collection->insertOne([
+            '_id' => null,
+            'email' => 'generated@example.com',
+        ]);
+        self::assertArrayNotHasKey('_id', $native->lastDocument);
+    }
+
+    public function testMongoDbCollectionRejectsInvalidNativeObjectsAndResults(): void
+    {
+        try {
+            new MongoDbCollection(new class () {
+                public function findOne(array $filter): ?array
+                {
+                    return null;
+                }
+
+                public function insertOne(array $document): object
+                {
+                    return new \stdClass();
+                }
+
+                public function replaceOne(array $filter, array $replacement): object
+                {
+                    return new \stdClass();
+                }
+            });
+            self::fail('Expected missing method exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Mongo collection object must provide deleteOne().', $exception->getMessage());
+        }
+
+        $native = new FakeMongoFlexibleCollection();
+        $collection = new MongoDbCollection($native);
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Mongo insertOne() result must provide getInsertedId().');
+
+        $collection->insertOne(['email' => 'invalid-result@example.com']);
+    }
+
+    public function testMongoDbCollectionRejectsInvalidDocumentsAndIds(): void
+    {
+        $native = new FakeMongoFlexibleCollection();
+        $collection = new MongoDbCollection($native);
+
+        try {
+            $native->findOneResult = 'not-a-document';
+            $collection->findOne(['_id' => 'broken']);
+            self::fail('Expected invalid document exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Mongo document must normalize to an array.', $exception->getMessage());
+        }
+
+        $native->findOneResult = ['_id' => ['not' => 'scalar']];
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Mongo document _id must be a string, integer, or stringable value.');
+
+        $collection->findOne(['_id' => 'broken-id']);
+    }
+
+    public function testMongoDbCollectionRejectsInvalidUpdateAndDeleteResults(): void
+    {
+        $native = new FakeMongoFlexibleCollection();
+        $collection = new MongoDbCollection($native);
+
+        try {
+            $collection->updateOne(['_id' => 'broken'], ['email' => 'broken@example.com']);
+            self::fail('Expected invalid replace result exception.');
+        } catch (RuntimeException $exception) {
+            self::assertSame('Mongo replaceOne() result must provide getMatchedCount().', $exception->getMessage());
+        }
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Mongo deleteOne() result must provide getDeletedCount().');
+
+        $collection->deleteOne(['_id' => 'broken']);
     }
 
     public function testInMemoryMongoCollectionSupportsAllBranches(): void

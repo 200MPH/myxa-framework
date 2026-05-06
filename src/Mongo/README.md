@@ -18,8 +18,19 @@ The Mongo layer includes:
 - `MongoManager` for named connections
 - `MongoConnection` for registered collections
 - `MongoCollectionInterface` as the low-level collection contract
+- `MongoDbCollection` for real MongoDB collections through `mongodb/mongodb`
 - `InMemoryMongoCollection` for tests and local experiments
 - `MongoModel` for document-backed models with declared properties, hooks, casting, and dirty tracking
+
+## Requirements For Real MongoDB
+
+Real MongoDB connections use the official `mongodb/mongodb` Composer package and the `ext-mongodb` PHP extension.
+
+```bash
+composer require mongodb/mongodb
+```
+
+Install and enable the PHP MongoDB extension for your runtime as well. Once both are available, use `MongoConnection::fromUri()` or `MongoConnection::fromDatabase()`.
 
 ## Use MongoManager Directly
 
@@ -43,6 +54,32 @@ $mongo->addConnection('main', new MongoConnection([
 $document = $mongo->collection('users')->findOne(['_id' => 1]);
 ```
 
+## Use A Real MongoDB Connection
+
+```php
+use Myxa\Mongo\Connection\MongoConnection;
+use Myxa\Mongo\MongoManager;
+
+$mongo = new MongoManager('main');
+$mongo->addConnection('main', MongoConnection::fromUri(
+    uri: 'mongodb://127.0.0.1:27017',
+    database: 'myxa',
+));
+
+$id = $mongo->collection('users')->insertOne([
+    'email' => 'jane@example.com',
+    'status' => 'active',
+]);
+
+$document = $mongo->collection('users')->findOne(['_id' => $id]);
+```
+
+If your application already builds a `MongoDB\Database` object, wrap it directly:
+
+```php
+$connection = MongoConnection::fromDatabase($database);
+```
+
 ## Connection and Collection Model
 
 `MongoManager` resolves named connections, and each `MongoConnection` resolves named collections:
@@ -64,6 +101,18 @@ $mongo->addConnection('archive', fn (): MongoConnection => new MongoConnection([
 ]));
 ```
 
+Real MongoDB connections resolve collections lazily from the selected database:
+
+```php
+$mongo->addConnection('main', MongoConnection::fromUri(
+    'mongodb://127.0.0.1:27017',
+    'myxa',
+));
+
+$users = $mongo->collection('users');
+$audit = $mongo->collection('audit_logs');
+```
+
 ## Collection Operations
 
 The low-level collection contract is intentionally small:
@@ -80,6 +129,8 @@ This is useful when:
 - you want direct document access without a model class
 - you are building adapters around a custom collection implementation
 - you are testing Mongo-backed logic with `InMemoryMongoCollection`
+
+The real MongoDB adapter uses `findOne()`, `insertOne()`, `replaceOne()`, and `deleteOne()` internally. `updateOne()` on the framework contract replaces the matched document with the document you pass in, matching `MongoModel::save()` behavior.
 
 ## MongoModel
 
@@ -278,5 +329,6 @@ $document = Mongo::collection('users')->findOne(['_id' => 1]);
 - `MongoModel` is document-backed and does not provide SQL-style relations or a SQL query builder
 - `find()` is the main lookup helper on the current implementation
 - the default primary key is `_id`
+- `MongoDbCollection` converts MongoDB ObjectId values to strings when reading documents, and converts 24-character hex `_id` filters back to ObjectId values when querying real MongoDB
 - `InMemoryMongoCollection` is a practical default for tests and local experiments
 - for SQL-backed models, see [Database Model](../Database/Model/README.md)
