@@ -72,6 +72,71 @@ final class RequestTest extends TestCase
         self::assertSame('{"search":"myxa"}', $request->content());
     }
 
+    public function testRequestExposesJsonPayloadAsInput(): void
+    {
+        $request = new Request(
+            query: ['page' => '1', 'name' => 'query-name'],
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/api/users?page=1',
+                'CONTENT_TYPE' => 'application/vnd.api+json; charset=UTF-8',
+            ],
+            content: '{"name":"Myxa","email":"hello@example.test","nested":{"active":true}}',
+        );
+
+        self::assertSame('Myxa', $request->json('name'));
+        self::assertSame(['active' => true], $request->json('nested'));
+        self::assertSame('fallback', $request->json('missing', 'fallback'));
+        self::assertSame('Myxa', $request->input('name'));
+        self::assertSame('hello@example.test', $request->input('email'));
+        self::assertSame('1', $request->input('page'));
+        self::assertSame([
+            'page' => '1',
+            'name' => 'Myxa',
+            'email' => 'hello@example.test',
+            'nested' => ['active' => true],
+        ], $request->all());
+    }
+
+    public function testPostInputWinsOverJsonAndJsonWinsOverQuery(): void
+    {
+        $request = new Request(
+            query: ['name' => 'query-name', 'page' => '1'],
+            post: ['name' => 'post-name'],
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/users?page=1',
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            content: '{"name":"json-name","email":"hello@example.test"}',
+        );
+
+        self::assertSame('json-name', $request->json('name'));
+        self::assertSame('post-name', $request->input('name'));
+        self::assertSame([
+            'name' => 'post-name',
+            'page' => '1',
+            'email' => 'hello@example.test',
+        ], $request->all());
+    }
+
+    public function testRequestIgnoresInvalidJsonPayloadForInput(): void
+    {
+        $request = new Request(
+            query: ['page' => '1'],
+            server: [
+                'REQUEST_METHOD' => 'POST',
+                'REQUEST_URI' => '/api/users?page=1',
+                'CONTENT_TYPE' => 'application/json',
+            ],
+            content: '{"name":',
+        );
+
+        self::assertSame([], $request->json());
+        self::assertSame('fallback', $request->json('name', 'fallback'));
+        self::assertSame(['page' => '1'], $request->all());
+    }
+
     public function testRequestFallsBackToGeneratedUriAndDefaults(): void
     {
         $request = new Request(
