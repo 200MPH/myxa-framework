@@ -71,7 +71,15 @@ final class Request
     }
 
     /**
-     * Return an input value from merged query and POST data, or all input.
+     * Return a JSON body value or the full decoded JSON object.
+     */
+    public static function json(?string $key = null, mixed $default = null): mixed
+    {
+        return self::getRequest()->json($key, $default);
+    }
+
+    /**
+     * Return an input value from merged query, JSON, and POST data, or all input.
      */
     public static function input(?string $key = null, mixed $default = null): mixed
     {
@@ -79,7 +87,7 @@ final class Request
     }
 
     /**
-     * Return all merged query and POST input data.
+     * Return all merged query, JSON, and POST input data.
      *
      * @return array<string, mixed>
      */

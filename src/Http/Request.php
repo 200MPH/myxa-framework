@@ -49,6 +49,11 @@ final class Request
 
     private string $content;
 
+    /** @var array<string, mixed> */
+    private array $json = [];
+
+    private bool $jsonDecoded = false;
+
     /**
      * @param array<string, mixed> $query
      * @param array<string, mixed> $post
@@ -134,7 +139,17 @@ final class Request
     }
 
     /**
-     * Return an input value from merged query and POST data, or all input.
+     * Return a JSON body value or the full decoded JSON object.
+     *
+     * @return array<string, mixed>|mixed
+     */
+    public function json(?string $key = null, mixed $default = null): mixed
+    {
+        return $this->valueFrom($this->jsonInput(), $key, $default);
+    }
+
+    /**
+     * Return an input value from merged query, JSON, and POST data, or all input.
      *
      * @return array<string, mixed>|mixed
      */
@@ -146,13 +161,13 @@ final class Request
     }
 
     /**
-     * Return all merged query and POST input data.
+     * Return all merged query, JSON, and POST input data.
      *
      * @return array<string, mixed>
      */
     public function all(): array
     {
-        return array_replace($this->query, $this->post);
+        return array_replace($this->query, $this->jsonInput(), $this->post);
     }
 
     /**
@@ -342,8 +357,7 @@ final class Request
             return true;
         }
 
-        $contentType = strtolower((string) $this->header('Content-Type', ''));
-        if (str_contains($contentType, 'application/json') || str_contains($contentType, '+json')) {
+        if ($this->hasJsonContentType()) {
             return true;
         }
 
@@ -368,6 +382,37 @@ final class Request
     public function content(): string
     {
         return $this->content;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function jsonInput(): array
+    {
+        if ($this->jsonDecoded) {
+            return $this->json;
+        }
+
+        $this->jsonDecoded = true;
+
+        if (!$this->hasJsonContentType() || trim($this->content) === '') {
+            return $this->json;
+        }
+
+        $decoded = json_decode($this->content, true);
+
+        if (is_array($decoded)) {
+            $this->json = $decoded;
+        }
+
+        return $this->json;
+    }
+
+    private function hasJsonContentType(): bool
+    {
+        $contentType = strtolower((string) $this->header('Content-Type', ''));
+
+        return str_contains($contentType, 'application/json') || str_contains($contentType, '+json');
     }
 
     /**

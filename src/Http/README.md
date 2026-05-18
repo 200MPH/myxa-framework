@@ -16,6 +16,7 @@ $method = Request::method();
 $allInput = Request::all();
 $page = Request::query('page', 1);
 $email = Request::post('email');
+$name = Request::json('name');
 $search = Request::input('search');
 $sessionId = Request::cookie('session');
 $token = Request::bearerToken();
@@ -37,7 +38,11 @@ $email = Request::post('email');
 $password = Request::post('password');
 $allPost = Request::post();
 
-// Merged query + POST input
+// JSON body fields
+$name = Request::json('name');
+$allJson = Request::json();
+
+// Merged query + JSON + POST input
 $search = Request::input('search');
 $allInput = Request::all();
 
@@ -81,8 +86,8 @@ $rawBody = Request::content();
 
 Useful notes:
 
-- `Request::query('key', $default)`, `Request::post('key', $default)`, `Request::input('key', $default)`, `Request::cookie('key', $default)`, `Request::file('key', $default)`, `Request::rawFile('key', $default)`, and `Request::header('name', $default)` all support a default value.
-- `Request::input()` and `Request::all()` merge query and POST data. When the same key exists in both places, POST wins.
+- `Request::query('key', $default)`, `Request::post('key', $default)`, `Request::json('key', $default)`, `Request::input('key', $default)`, `Request::cookie('key', $default)`, `Request::file('key', $default)`, `Request::rawFile('key', $default)`, and `Request::header('name', $default)` all support a default value.
+- `Request::input()` and `Request::all()` merge query, JSON body, and POST data. When the same key exists in more than one place, POST wins over JSON, and JSON wins over query.
 - `Request::file()` returns `UploadedFile` objects (and nested arrays of `UploadedFile` objects for multi-file inputs), while `Request::rawFile()` returns the original PHP `$_FILES` structure.
 - `Request::expectsJson()` returns `true` for JSON `Accept` or `Content-Type` headers, AJAX requests, and `/api` routes.
 

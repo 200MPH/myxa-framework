@@ -55,6 +55,7 @@ final class RequestFacadeTest extends TestCase
         self::assertSame('3', RequestFacade::query('page'));
         self::assertSame(['page' => '3'], RequestFacade::query());
         self::assertSame('Myxa', RequestFacade::post('name'));
+        self::assertSame('Myxa', RequestFacade::json('name'));
         self::assertSame('Myxa', RequestFacade::input('name'));
         self::assertSame(['page' => '3', 'name' => 'Myxa'], RequestFacade::all());
         self::assertSame('forest', RequestFacade::cookie('theme'));
