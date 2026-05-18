@@ -74,6 +74,13 @@ final class ValidationTest extends TestCase
             'user_id' => 1,
             'notes' => null,
         ], $validator->validated());
+        self::assertSame('John', $validator->get('name'));
+        self::assertSame('john@example.com', $validator->get('email'));
+        self::assertNull($validator->get('notes'));
+        self::assertTrue($validator->has('name'));
+        self::assertTrue($validator->has('notes'));
+        self::assertFalse($validator->has('missing'));
+        self::assertSame('fallback', $validator->get('missing', 'fallback'));
     }
 
     public function testFluentValidatorCollectsErrorsAndThrowsException(): void
@@ -112,6 +119,10 @@ final class ValidationTest extends TestCase
             self::assertSame('Validation failed.', $exception->getMessage());
             self::assertSame($validator->errors(), $exception->errors());
         }
+
+        $this->expectException(ValidationException::class);
+
+        $validator->get('name');
     }
 
     public function testExistsSupportsCustomSources(): void

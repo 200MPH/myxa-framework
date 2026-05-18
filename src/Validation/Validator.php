@@ -118,6 +118,39 @@ final class Validator
     }
 
     /**
+     * Return a validated value by dot-notated field name, or the default when absent.
+     */
+    public function get(string $field, mixed $default = null): mixed
+    {
+        return $this->validatedValue($field, $default);
+    }
+
+    /**
+     * Determine whether a dot-notated field exists in the validated data.
+     */
+    public function has(string $field): bool
+    {
+        $missing = new \stdClass();
+
+        return $this->validatedValue($field, $missing) !== $missing;
+    }
+
+    private function validatedValue(string $field, mixed $default = null): mixed
+    {
+        $cursor = $this->validated();
+
+        foreach (explode('.', $field) as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                return $default;
+            }
+
+            $cursor = $cursor[$segment];
+        }
+
+        return $cursor;
+    }
+
+    /**
      * @param array<string, mixed> $validated
      */
     private function setValidatedValue(array &$validated, string $field, mixed $value): void
