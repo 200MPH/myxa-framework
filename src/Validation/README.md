@@ -226,6 +226,19 @@ $validator->field('email')->required()->string()->email();
 $validated = $validator->validate();
 ```
 
+You can also read individual validated values after validation succeeds:
+
+```php
+$name = $validator->get('name');
+$email = $validator->get('email');
+$street = $validator->get('user.address.street', 'unknown');
+```
+
+`get()` reads only from validated data. If validation fails it throws
+`ValidationException`. Use `get('field', $default)` when a missing value should
+fall back, and `has('field')` when you only need to check whether a validated
+field is present.
+
 Result:
 
 ```php
