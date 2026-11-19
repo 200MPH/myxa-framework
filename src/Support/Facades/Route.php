@@ -147,9 +147,13 @@ final class Route
     /**
      * Register a grouped set of routes behind a shared prefix.
      */
-    public static function group(string $prefix, callable $routes, mixed $middlewares = []): void
-    {
-        self::getRouter()->group($prefix, $routes, $middlewares);
+    public static function group(
+        string $prefix,
+        callable $routes,
+        mixed $middlewares = [],
+        string $name = '',
+    ): void {
+        self::getRouter()->group($prefix, $routes, $middlewares, $name);
     }
 
     /**
@@ -161,13 +165,13 @@ final class Route
     }
 
     /**
-     * Return all registered routes.
+     * Return the registered routes, optionally filtered by group name.
      *
      * @return list<RouteDefinition>
      */
-    public static function routes(): array
+    public static function routes(?string $groupName = null): array
     {
-        return self::getRouter()->routes();
+        return self::getRouter()->routes($groupName);
     }
 
     /**

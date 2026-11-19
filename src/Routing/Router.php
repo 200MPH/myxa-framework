@@ -28,6 +28,11 @@ final class Router
     private array $groupPrefixes = [];
 
     /**
+     * @var list<string>
+     */
+    private array $groupNames = [];
+
+    /**
      * @var list<list<mixed>>
      */
     private array $groupMiddlewares = [];
@@ -51,6 +56,7 @@ final class Router
             $this->applyGroupPrefix($path),
             $handler,
             $this->currentGroupMiddlewares(),
+            array_values(array_filter($this->groupNames, static fn (string $name): bool => $name !== '')),
         );
 
         $this->routes[] = $route;
@@ -155,10 +161,15 @@ final class Router
     /**
      * Register a nested route group with a shared path prefix.
      */
-    public function group(string $prefix, callable $routes, mixed $middlewares = []): void
-    {
+    public function group(
+        string $prefix,
+        callable $routes,
+        mixed $middlewares = [],
+        string $name = '',
+    ): void {
         $this->groupPrefixes[] = $this->normalizePrefix($prefix);
         $this->groupMiddlewares[] = $this->normalizeMiddlewares($middlewares);
+        $this->groupNames[] = $name;
 
         try {
             $this->container->call($routes, [
@@ -166,6 +177,7 @@ final class Router
                 'router' => $this,
             ]);
         } finally {
+            array_pop($this->groupNames);
             array_pop($this->groupMiddlewares);
             array_pop($this->groupPrefixes);
         }
@@ -189,13 +201,20 @@ final class Router
     }
 
     /**
-     * Return the registered routes.
+     * Return the registered routes, optionally filtered by group name.
      *
      * @return list<RouteDefinition>
      */
-    public function routes(): array
+    public function routes(?string $groupName = null): array
     {
-        return $this->routes;
+        if ($groupName === null) {
+            return $this->routes;
+        }
+
+        return array_values(array_filter(
+            $this->routes,
+            static fn (RouteDefinition $route): bool => in_array($groupName, $route->groupNames(), true),
+        ));
     }
 
     /**

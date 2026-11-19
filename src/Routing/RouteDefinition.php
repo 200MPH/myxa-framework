@@ -20,12 +20,14 @@ final class RouteDefinition
      * @param list<string> $methods
      * @param mixed $handler
      * @param list<mixed> $middlewares
+     * @param list<string> $groupNames
      */
     public function __construct(
         private array $methods,
         private string $path,
         private mixed $handler,
         array $middlewares = [],
+        private array $groupNames = [],
     ) {
         $parameterNames = $this->parameterNames();
 
@@ -65,6 +67,24 @@ final class RouteDefinition
     public function handler(): mixed
     {
         return $this->handler;
+    }
+
+    /**
+     * Return the name of the nearest named group, or an empty string.
+     */
+    public function groupName(): string
+    {
+        return $this->groupNames[array_key_last($this->groupNames)] ?? '';
+    }
+
+    /**
+     * Return all named groups containing this route, outermost first.
+     *
+     * @return list<string>
+     */
+    public function groupNames(): array
+    {
+        return $this->groupNames;
     }
 
     /**

@@ -49,6 +49,61 @@ final class RouterTest extends TestCase
         self::assertSame(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'], $routes[3]->methods());
     }
 
+    public function testNamedGroupsCanBeQueriedIncludingNestedRoutes(): void
+    {
+        $router = new Router(new Application());
+        $router->group('/admin', function (Router $router): void {
+            $router->get('/', static fn (): string => 'admin');
+            $router->group('/users', function (Router $router): void {
+                $router->get('/', static fn (): string => 'users');
+            }, name: 'users');
+            $router->group('/reports', function (Router $router): void {
+                $router->middleware([], function (Router $router): void {
+                    $router->get('/', static fn (): string => 'reports');
+                });
+            });
+        }, name: 'admin');
+        $router->get('/public', static fn (): string => 'public');
+        $router->group('/other', function (Router $router): void {
+            $router->get('/', static fn (): string => 'other');
+        }, [], 'admin');
+
+        self::assertSame(
+            ['/admin', '/admin/users', '/admin/reports', '/other'],
+            array_map(static fn (RouteDefinition $route): string => $route->path(), $router->routes('admin')),
+        );
+        self::assertSame([$router->find('GET', '/admin/users')], $router->routes('users'));
+        self::assertSame(['admin', 'users'], $router->find('GET', '/admin/users')->groupNames());
+        self::assertSame('users', $router->find('GET', '/admin/users')->groupName());
+        self::assertSame(['admin'], $router->find('GET', '/admin/reports')->groupNames());
+        self::assertSame([], $router->find('GET', '/public')->groupNames());
+        self::assertSame('', $router->find('GET', '/public')->groupName());
+        self::assertSame([], $router->routes('missing'));
+        self::assertSame([], $router->routes(''));
+        self::assertCount(5, $router->routes());
+    }
+
+    public function testNamedGroupStateIsRestoredAfterAnException(): void
+    {
+        $router = new Router(new Application());
+        $router->group('/admin', function (Router $router): void {
+            try {
+                $router->group('/broken', static function (): void {
+                    throw new \RuntimeException('group failed');
+                }, name: 'broken');
+            } catch (\RuntimeException $exception) {
+                self::assertSame('group failed', $exception->getMessage());
+            }
+
+            $router->get('/dashboard', static fn (): string => 'dashboard');
+        }, name: 'admin');
+        $router->get('/public', static fn (): string => 'public');
+
+        self::assertSame(['admin'], $router->find('GET', '/admin/dashboard')->groupNames());
+        self::assertSame([], $router->find('GET', '/public')->groupNames());
+        self::assertSame([], $router->routes('broken'));
+    }
+
     public function testRouterDispatchesClosuresWithInjectedRequestAndDependencies(): void
     {
         $app = new Application();
