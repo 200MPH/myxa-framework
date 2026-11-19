@@ -109,6 +109,24 @@ Route::group('/api', static function (): void {
 }, [AuthMiddleware::using('api')]);
 ```
 
+Groups can have an optional name, independent of their URL prefix:
+
+```php
+Route::group('/admin', static function (): void {
+    Route::get('/users', [AdminUserController::class, 'index']);
+}, name: 'admin');
+
+$adminRoutes = Route::routes('admin');
+$allRoutes = Route::routes();
+```
+
+The signature is `group(string $prefix, callable $routes, mixed $middlewares = [], string $name = '')`.
+Existing calls remain valid. A group query includes routes in nested groups and
+returns an empty array for an unknown name. Groups sharing a name are returned
+together. Unnamed nested groups inherit membership in their named ancestors.
+Use `$route->groupName()` for the nearest named group (`''` outside named groups),
+or `$route->groupNames()` for all containing named groups, outermost first.
+
 ## Middleware Groups
 
 Use `middleware()` when you want shared middleware without adding a path prefix:

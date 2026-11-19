@@ -48,6 +48,22 @@ final class RouteFacadeTest extends TestCase
         );
     }
 
+    public function testFacadeRegistersAndQueriesNamedGroups(): void
+    {
+        RouteFacade::setRouter(new Router(new Application()));
+        RouteFacade::group('/admin', static function (): void {
+            RouteFacade::get('/users', static fn (RouteDefinition $route): string => $route->groupName());
+        }, name: 'admin');
+        RouteFacade::get('/public', static fn (): string => 'public');
+
+        self::assertSame([RouteFacade::find('GET', '/admin/users')], RouteFacade::routes('admin'));
+        self::assertCount(2, RouteFacade::routes());
+        self::assertSame('admin', RouteFacade::dispatch(new HttpRequest(server: [
+            'REQUEST_METHOD' => 'GET',
+            'REQUEST_URI' => '/admin/users',
+        ])));
+    }
+
     public function testFacadeExposesAllRouteRegistrationHelpers(): void
     {
         $router = new Router(new Application());
